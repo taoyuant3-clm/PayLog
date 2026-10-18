@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知列小圖示：手機 + 感應波 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M6,2h8a2,2 0,0 1,2 2v16a2,2 0,0 1,-2 2H6a2,2 0,0 1,-2 -2V4a2,2 0,0 1,2 -2zM6,4v14h8V4H6zM9,19.5h2v1H9z"/>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M17.6,8.2l1.1,-1.1a7,7 0,0 1,0 9.8l-1.1,-1.1a5.4,5.4 0,0 0,0 -7.6z"/>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M19.8,6l1.1,-1.1a10.1,10.1 0,0 1,0 14.2L19.8,18a8.5,8.5 0,0 0,0 -12z"/>
+</vector>
