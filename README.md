@@ -1,3 +1,15 @@
+<p align="center"><img src="docs/banner.png" alt="嗶記帳 PayLog" width="720"></p>
+
+<p align="center">
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/taoyuant3-clm/PayLog?label=%E4%B8%8B%E8%BC%89&color=0F766E" alt="最新版本"></a>
+  <a href="../../releases"><img src="https://img.shields.io/github/downloads/taoyuant3-clm/PayLog/total?label=%E4%B8%8B%E8%BC%89%E6%AC%A1%E6%95%B8&color=0F766E" alt="下載次數"></a>
+  <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" alt="Android 8.0+">
+  <img src="https://img.shields.io/badge/iOS-17%2B-000000?logo=apple" alt="iOS 17+">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/taoyuant3-clm/PayLog?color=blue" alt="MIT"></a>
+</p>
+
+<p align="center"><b><a href="../../releases/latest">⬇ 下載 Android APK</a></b> · <a href="#english">English</a></p>
+
 # 嗶記帳 PayLog
 
 手機感應付款（NFC）或網購收到驗證碼簡訊後，自動彈出記帳畫面。
@@ -6,6 +18,22 @@
 - 所有紀錄只存在你的手機，不上傳、不需註冊、沒有廣告
 - 一鍵匯出 CSV，Excel 直接開啟
 - 免費、開放原始碼（MIT 授權）
+
+## 運作方式
+
+```mermaid
+flowchart LR
+  A[手機感應付款<br/>或網購驗證碼簡訊] --> B[錢包 / 銀行通知]
+  B --> C[嗶記帳自動彈出]
+  C --> D[你填：金額・卡別・用途]
+  C -.自動帶入.-> E[日期・時間・地點・商家]
+  D --> F[本月合計・匯出 CSV]
+```
+
+## 為什麼做這個
+
+手機嗶一下付款很方便，但月底常想不起錢花去哪。一般記帳 App 要自己打開、自己記，很容易忘。
+嗶記帳在**付款的那一刻**主動跳出來，三秒記好，不會漏。
 
 ## Android 安裝
 
@@ -40,3 +68,23 @@ iPhone 版需自行用 Mac + Xcode 建置（Apple 限制，無法直接下載安
 ## 免責聲明
 
 本 App 僅供個人記帳參考，不處理任何付款，也不保證每筆交易都能被偵測。
+
+## 喜歡的話
+
+- 按右上角 ⭐ **Star** 支持一下，讓更多人看到
+- 分享下載連結給朋友：`https://github.com/taoyuant3-clm/PayLog/releases/latest`
+- 歡迎回報銀行通知格式、提出建議或送 Pull Request
+
+---
+
+<a id="english"></a>
+## English
+
+**PayLog** is a privacy-first expense logger for Android (and iOS). Right after you tap to pay with your phone (Google Wallet, Samsung Wallet, bank apps) — or receive an online-shopping OTP SMS — it pops up a quick form: amount, card (VISA / Mastercard / EasyCard) and purpose. Date, time, location and merchant are filled in automatically.
+
+- All data stays on your phone — no account, no ads, no tracking
+- Export to CSV (opens in Excel / Google Sheets)
+- Zero third-party dependencies, MIT licensed
+- Notification parsing is tuned for Taiwan banks (Traditional Chinese); PRs adding other locales are welcome
+
+Download the APK from [Releases](../../releases/latest).
