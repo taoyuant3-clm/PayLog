@@ -22,6 +22,7 @@ import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.CompoundButton;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Switch;
@@ -130,6 +131,7 @@ public class MainActivity extends Activity {
     private void refresh() {
         Db db = Db.get(this);
         adapter.items = db.list(500);
+        adapter.photoCounts = db.photoCounts();
         adapter.notifyDataSetChanged();
         empty.setText(adapter.items.isEmpty()
                 ? "還沒有紀錄。\n開啟付款偵測後，用手機感應付款或網購收到驗證碼簡訊，就會自動彈出填寫畫面。"
@@ -284,6 +286,7 @@ public class MainActivity extends Activity {
 
     private final class Adapter extends BaseAdapter {
         List<Record> items = new ArrayList<>();
+        Map<Long, Integer> photoCounts = new java.util.HashMap<>();
 
         @Override
         public int getCount() {
@@ -309,7 +312,9 @@ public class MainActivity extends Activity {
             } else {
                 row = new Row(c);
             }
-            row.bind(items.get(position));
+            Record rec = items.get(position);
+            Integer pc = photoCounts.get(rec.id);
+            row.bind(rec, pc == null ? 0 : pc);
             return row.root;
         }
     }
@@ -342,10 +347,11 @@ public class MainActivity extends Activity {
             root.setTag(this);
         }
 
-        void bind(Record r) {
+        void bind(Record r, int photoCount) {
             Context c = root.getContext();
             String card = TextUtils.isEmpty(r.card) ? "" : "  ·  " + r.card;
-            when.setText(Fmt.format(r.timeMillis, Fmt.SHORT) + card);
+            String pics = photoCount > 0 ? "  ·  📎" + photoCount : "";
+            when.setText(Fmt.format(r.timeMillis, Fmt.SHORT) + card + pics);
             amount.setText(r.amount > 0 ? Fmt.money(r.amount) : "NT$ —");
             if (r.pending) {
                 detail.setText("⚠ 待填寫 — 點此補填" + (TextUtils.isEmpty(r.sourceLabel) ? "" : "（" + r.sourceLabel + "）"));
@@ -567,6 +573,15 @@ public class MainActivity extends Activity {
         });
         box.addView(testOtp, Ui.topMargin(this, 10));
 
+        Button cats = Ui.ghostButton(this, "管理用途（新增 / 刪除）");
+        cats.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                manageCategories();
+            }
+        });
+        box.addView(cats, Ui.topMargin(this, 10));
+
         Button access = Ui.ghostButton(this, "通知存取權設定");
         access.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -607,6 +622,74 @@ public class MainActivity extends Activity {
         return sv;
     }
 
+    /** 用途清單：點一下刪除，下方可新增或恢復預設。 */
+    private void manageCategories() {
+        final List<String> list = Prefs.categories(this);
+        final String[] items = list.toArray(new String[0]);
+        new AlertDialog.Builder(this)
+                .setTitle("用途（點一下可刪除）")
+                .setItems(items, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, final int which) {
+                        final String name = items[which];
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setMessage("刪除用途「" + name + "」？\n已記錄的消費不受影響。")
+                                .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface d2, int w) {
+                                        manageCategories();
+                                    }
+                                })
+                                .setPositiveButton("刪除", new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface d2, int w) {
+                                        Prefs.removeCategory(MainActivity.this, name);
+                                        manageCategories();
+                                    }
+                                })
+                                .show();
+                    }
+                })
+                .setPositiveButton("＋ 新增", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        addCategoryDialog();
+                    }
+                })
+                .setNeutralButton("恢復預設", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        Prefs.resetCategories(MainActivity.this);
+                        Toast.makeText(MainActivity.this, "已恢復預設用途", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("完成", null)
+                .show();
+    }
+
+    private void addCategoryDialog() {
+        final EditText et = new EditText(this);
+        et.setHint("例如：停車費、孩子學費、公司報帳");
+        et.setSingleLine(true);
+        LinearLayout box = Ui.vbox(this);
+        int p = Ui.dp(this, 20);
+        box.setPadding(p, Ui.dp(this, 8), p, 0);
+        box.addView(et, Ui.matchWrap());
+        new AlertDialog.Builder(this)
+                .setTitle("新增用途")
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("新增", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        String n = Prefs.addCategory(MainActivity.this, et.getText().toString());
+                        if (!n.isEmpty()) Toast.makeText(MainActivity.this, "已新增「" + n + "」", Toast.LENGTH_SHORT).show();
+                        manageCategories();
+                    }
+                })
+                .show();
+    }
+
     private static String delayLabel(int sec) {
         return "驗證簡訊彈出時間：" + (sec <= 0 ? "立即" : "收到後 " + sec + " 秒");
     }
@@ -637,14 +720,29 @@ public class MainActivity extends Activity {
 
     // ───────────────────────── 匯出 ─────────────────────────
 
-    @SuppressWarnings("deprecation")
+    private static final int REQ_EXPORT_ZIP = 24;
+
     private void startExport() {
+        new AlertDialog.Builder(this)
+                .setTitle("匯出")
+                .setItems(new String[]{"只匯出表格（CSV）", "表格 + 發票照片（ZIP）"}, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        createExportFile(which == 1);
+                    }
+                })
+                .show();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void createExportFile(boolean zip) {
+        String base = "嗶記帳_" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT)
                 .addCategory(Intent.CATEGORY_OPENABLE)
-                .setType("text/csv")
-                .putExtra(Intent.EXTRA_TITLE, "嗶記帳_" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + ".csv");
+                .setType(zip ? "application/zip" : "text/csv")
+                .putExtra(Intent.EXTRA_TITLE, base + (zip ? ".zip" : ".csv"));
         try {
-            startActivityForResult(i, REQ_EXPORT);
+            startActivityForResult(i, zip ? REQ_EXPORT_ZIP : REQ_EXPORT);
         } catch (ActivityNotFoundException e) {
             Toast.makeText(this, "找不到檔案管理員", Toast.LENGTH_SHORT).show();
         }
@@ -654,17 +752,25 @@ public class MainActivity extends Activity {
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQ_EXPORT || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if ((requestCode != REQ_EXPORT && requestCode != REQ_EXPORT_ZIP)
+                || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        final boolean zip = requestCode == REQ_EXPORT_ZIP;
         final Uri uri = data.getData();
-        final List<Record> all = Db.get(this).list(0);
+        final Db db = Db.get(this);
+        final List<Record> all = db.list(0);
         new Thread(new Runnable() {
             @Override
             public void run() {
                 String msg;
                 try (OutputStream os = getContentResolver().openOutputStream(uri, "wt")) {
                     if (os == null) throw new java.io.IOException("無法寫入");
-                    os.write(Csv.build(all).getBytes(StandardCharsets.UTF_8));
-                    msg = "已匯出 " + all.size() + " 筆";
+                    if (zip) {
+                        int n = Export.zip(MainActivity.this, db, all, os);
+                        msg = "已匯出 " + all.size() + " 筆、" + n + " 張照片";
+                    } else {
+                        os.write(Csv.build(all, Export.photoCountsAsNames(db, all)).getBytes(StandardCharsets.UTF_8));
+                        msg = "已匯出 " + all.size() + " 筆";
+                    }
                 } catch (Exception e) {
                     msg = "匯出失敗：" + e.getMessage();
                 }
@@ -690,9 +796,10 @@ public class MainActivity extends Activity {
         private Csv() {
         }
 
-        static String build(List<Record> rows) {
-            StringBuilder sb = new StringBuilder("﻿");
-            sb.append("日期,時間,消費總值,支付卡,用途,備註,商家,地點,緯度,經度,來源,狀態\r\n");
+        /** @param photoNames 每筆紀錄寫進「照片」欄的文字（ZIP 內檔名或張數），可為 null */
+        static String build(List<Record> rows, Map<Long, String> photoNames) {
+            StringBuilder sb = new StringBuilder("\uFEFF");
+            sb.append("日期,時間,消費總值,支付卡,用途,備註,商家,地點,緯度,經度,來源,狀態,照片\r\n");
             for (Record r : rows) {
                 sb.append(Fmt.format(r.timeMillis, Fmt.DATE)).append(',')
                         .append(Fmt.format(r.timeMillis, Fmt.TIME)).append(',')
@@ -705,7 +812,8 @@ public class MainActivity extends Activity {
                         .append(r.hasLocation() ? String.format(Locale.ROOT, "%.6f", r.lat) : "").append(',')
                         .append(r.hasLocation() ? String.format(Locale.ROOT, "%.6f", r.lng) : "").append(',')
                         .append(esc(TextUtils.isEmpty(r.sourceLabel) ? "手動" : r.sourceLabel)).append(',')
-                        .append(r.pending ? "待填寫" : "已填寫")
+                        .append(r.pending ? "待填寫" : "已填寫").append(',')
+                        .append(esc(photoNames == null || photoNames.get(r.id) == null ? "" : photoNames.get(r.id)))
                         .append("\r\n");
             }
             return sb.toString();

@@ -14,7 +14,8 @@ final class Prefs {
             "com.samsung.android.samsungpay.gear",    // Galaxy Watch 錢包
     };
 
-    static final String[] CATEGORIES = {
+    /** 預設用途；使用者可在設定或填寫畫面新增 / 刪除。 */
+    static final String[] DEFAULT_CATEGORIES = {
             "餐飲", "交通", "日用品", "購物", "娛樂", "醫療", "工作/公務", "其他"
     };
 
@@ -72,6 +73,54 @@ final class Prefs {
 
     static void clearBlocked(Context c) {
         sp(c).edit().remove(K_BLOCKED).apply();
+    }
+
+    private static final String K_CATEGORIES = "categories";
+
+    /** 目前的用途清單（依使用者順序）。 */
+    static java.util.List<String> categories(Context c) {
+        String raw = sp(c).getString(K_CATEGORIES, null);
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (raw == null) {
+            java.util.Collections.addAll(out, DEFAULT_CATEGORIES);
+        } else {
+            for (String s : raw.split("\n")) {
+                String t = s.trim();
+                if (!t.isEmpty() && !out.contains(t)) out.add(t);
+            }
+        }
+        return out;
+    }
+
+    private static void saveCategories(Context c, java.util.List<String> list) {
+        StringBuilder sb = new StringBuilder();
+        for (String s : list) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(s.replace('\n', ' ').trim());
+        }
+        sp(c).edit().putString(K_CATEGORIES, sb.toString()).apply();
+    }
+
+    /** 新增用途；已存在則不重複。回傳整理後的名稱（空字串 = 無效）。 */
+    static String addCategory(Context c, String name) {
+        String n = name == null ? "" : name.replace('\n', ' ').trim();
+        if (n.isEmpty()) return "";
+        if (n.length() > 20) n = n.substring(0, 20);
+        java.util.List<String> list = categories(c);
+        if (!list.contains(n)) {
+            list.add(n);
+            saveCategories(c, list);
+        }
+        return n;
+    }
+
+    static void removeCategory(Context c, String name) {
+        java.util.List<String> list = categories(c);
+        if (list.remove(name)) saveCategories(c, list);
+    }
+
+    static void resetCategories(Context c) {
+        sp(c).edit().remove(K_CATEGORIES).apply();
     }
 
     private static final String K_POPUP = "auto_popup";

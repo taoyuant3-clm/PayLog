@@ -22,6 +22,19 @@ Android 不允許一般 App 攔截 NFC 付款本身。合規做法是：Google �
 
 > Android 10 起，系統禁止背景 App 直接開啟畫面，所以是以「高優先通知」彈出，點一下進入填寫頁 — 這是 Google Play 允許的唯一方式。
 
+## v1.2 新增
+
+**發票 / 收據照片**
+- 填寫畫面新增「拍照」「從相簿選」，每筆可附多張；點縮圖可放大或刪除
+- 照片壓縮後存在 App 私有目錄（長邊 1800px，約 200–500 KB / 張），其他 App 讀不到；刪除紀錄時一併刪除
+- 主畫面清單以 📎 數字顯示附圖張數
+- 匯出可選「表格 + 發票照片（ZIP）」：照片依「日期_金額」命名，CSV 新增「照片」欄對應檔名
+- 不需要相機權限（交給系統相機 App 拍攝）
+
+**用途自訂**
+- 用途選單最後一項「＋ 新增用途…」，填寫時就能直接新增
+- 設定 →「管理用途」：新增、刪除、恢復預設；已記錄的消費不受影響
+
 ## v1.1 新增
 
 **付款後自動彈出填寫畫面**（不必再點通知）
@@ -46,6 +59,8 @@ app/src/main/java/tw/clmchiu/paylog/
   PaymentListenerService.java  偵測付款通知
   SmsReceiver.java             網購驗證簡訊
   Detector.java / Popup.java / PopupReceiver.java  建立紀錄、自動彈出
+  Photos.java / PhotoProvider.java  發票照片存放、壓縮、相機寫入
+  Export.java                  CSV / ZIP 匯出
   PaymentParser.java           解析金額 / 卡別 / 商家（含單元測試）
   RecordActivity.java          填寫畫面（自動日期時間、定位）
   MainActivity.java            本月合計、清單、匯出 CSV、設定
