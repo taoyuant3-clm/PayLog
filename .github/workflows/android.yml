@@ -49,6 +49,8 @@ jobs:
           VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           F="PayLog-$VER-ci-debug.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$F"
-          gh release view "v$VER" >/dev/null 2>&1 || gh release create "v$VER" --target "$GITHUB_SHA" \
-            --title "嗶記帳 v$VER" --notes "CI 自動編譯（除錯簽章）。要覆蓋安裝舊版，請用自己的簽章金鑰重新簽署。"
-          gh release upload "v$VER" "$F" --clobber
+          # 已開啟「不可變發行」：檔案必須在建立發行時一併附上；同版本已發過則加上編譯序號
+          TAG="v$VER"
+          gh release view "$TAG" >/dev/null 2>&1 && TAG="v$VER-build$GITHUB_RUN_NUMBER"
+          gh release create "$TAG" "$F" --target "$GITHUB_SHA" \
+            --title "嗶記帳 $TAG" --notes "CI 自動編譯（除錯簽章）。要覆蓋安裝舊版，請用自己的簽章金鑰重新簽署。"
