@@ -2,6 +2,7 @@ name: Android build
 on:
   push:
     paths: ['android/**', '.github/workflows/android.yml']
+    branches: ['main']
     tags: ['v*']
   workflow_dispatch:
 jobs:
