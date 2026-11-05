@@ -203,6 +203,32 @@ final class Db extends SQLiteOpenHelper {
         return out;
     }
 
+    /** 區間內的紀錄（含待填寫），由新到舊。 */
+    List<Record> listRange(long fromMillis, long toMillis) {
+        List<Record> out = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().query("records", null, "ts>=? AND ts<?",
+                new String[]{String.valueOf(fromMillis), String.valueOf(toMillis)},
+                null, null, "ts DESC, id DESC")) {
+            while (c.moveToNext()) out.add(read(c));
+        }
+        return out;
+    }
+
+    /** 欄位中曾輸入過的字詞（備註 / 商家 / 地點），依使用次數、最近使用排序，供輸入時聯想。 */
+    List<String> pastWords(String column, int limit) {
+        if (!"note".equals(column) && !"merchant".equals(column) && !"address".equals(column)) {
+            throw new IllegalArgumentException(column);
+        }
+        List<String> out = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT TRIM(" + column + ") AS w, COUNT(*) AS n, MAX(ts) AS t FROM records "
+                        + "WHERE TRIM(" + column + ")<>'' GROUP BY w ORDER BY n DESC, t DESC LIMIT ?",
+                new String[]{String.valueOf(limit)})) {
+            while (c.moveToNext()) out.add(c.getString(0));
+        }
+        return out;
+    }
+
     int pendingCount() {
         try (Cursor c = getReadableDatabase().rawQuery(
                 "SELECT COUNT(*) FROM records WHERE pending=1", null)) {

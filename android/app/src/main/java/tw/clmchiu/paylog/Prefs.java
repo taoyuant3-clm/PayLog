@@ -172,4 +172,19 @@ final class Prefs {
     static void setDisclosed(Context c) {
         sp(c).edit().putBoolean(K_DISCLOSED, true).apply();
     }
+
+    // ───────── 兩段期間比較：記住上次選的日期（epochDay；-1 = 未設定） ─────────
+
+    private static final String K_RANGE = "compare_range_";
+
+    /** idx 0..3 = 期間一起、期間一迄、期間二起、期間二迄。 */
+    static long compareDay(Context c, int idx) {
+        return sp(c).getLong(K_RANGE + idx, -1);
+    }
+
+    static void setCompareDays(Context c, long[] days) {
+        SharedPreferences.Editor e = sp(c).edit();
+        for (int i = 0; i < days.length; i++) e.putLong(K_RANGE + i, days[i]);
+        e.apply();
+    }
 }

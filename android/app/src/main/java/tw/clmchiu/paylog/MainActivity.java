@@ -573,6 +573,15 @@ public class MainActivity extends Activity {
         });
         box.addView(testOtp, Ui.topMargin(this, 10));
 
+        Button compare = Ui.primaryButton(this, "兩段期間比較（消費紀錄及明細）");
+        compare.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, CompareActivity.class));
+            }
+        });
+        box.addView(compare, Ui.topMargin(this, 16));
+
         Button cats = Ui.ghostButton(this, "管理用途（新增 / 刪除）");
         cats.setOnClickListener(new View.OnClickListener() {
             @Override

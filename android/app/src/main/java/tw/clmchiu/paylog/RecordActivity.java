@@ -31,6 +31,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.DatePicker;
 import android.widget.EditText;
@@ -63,7 +64,8 @@ public class RecordActivity extends Activity {
     private Record record;
     private boolean isNew;
 
-    private EditText amountEt, noteEt, merchantEt, addressEt;
+    private EditText amountEt;
+    private AutoCompleteTextView noteEt, merchantEt, addressEt;
     private RadioGroup cardGroup;
     private Spinner categorySp;
     private Button dateBtn, timeBtn;
@@ -219,7 +221,7 @@ public class RecordActivity extends Activity {
             }
         });
 
-        noteEt = new EditText(this);
+        noteEt = new AutoCompleteTextView(this);
         noteEt.setHint("備註（選填），例如：午餐、出差計程車");
         noteEt.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         noteEt.setSingleLine(true);
@@ -295,7 +297,7 @@ public class RecordActivity extends Activity {
         });
 
         auto.addView(Ui.label(this, "商家"));
-        merchantEt = new EditText(this);
+        merchantEt = new AutoCompleteTextView(this);
         merchantEt.setHint("例如：7-ELEVEN");
         merchantEt.setSingleLine(true);
         auto.addView(merchantEt, Ui.matchWrap());
@@ -322,7 +324,7 @@ public class RecordActivity extends Activity {
         locHead.addView(relocate);
         auto.addView(locHead, Ui.matchWrap());
 
-        addressEt = new EditText(this);
+        addressEt = new AutoCompleteTextView(this);
         addressEt.setHint("定位中…");
         addressEt.setMinLines(1);
         addressEt.setMaxLines(3);
@@ -371,6 +373,11 @@ public class RecordActivity extends Activity {
         addressEt.setText(record.address);
         if (!TextUtils.isEmpty(record.address)) addressEt.setHint("地址");
         refreshDateTime();
+
+        // 輸入聯想：曾輸入過的備註、商家、地點（在 setText 之後掛上，避免一開啟就跳出清單）
+        Suggest.attach(noteEt, "note");
+        Suggest.attach(merchantEt, "merchant");
+        Suggest.attach(addressEt, "address");
 
         if (record.amount <= 0) {
             amountEt.requestFocus();
@@ -849,7 +856,7 @@ public class RecordActivity extends Activity {
         if (isFinishing() || isDestroyed()) return;
         String cur = addressEt.getText().toString().trim();
         if (cur.isEmpty() || cur.equals(autoAddress)) {
-            addressEt.setText(text);
+            addressEt.setText(text, false); // 自動帶入的地址不觸發聯想清單
             autoAddress = text;
         }
         addressEt.setHint("地址");

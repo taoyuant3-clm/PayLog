@@ -65,6 +65,11 @@
                 android:value="conversations|alerting|silent" />
         </service>
 
+        <activity
+            android:name=".CompareActivity"
+            android:exported="false"
+            android:label="兩段期間比較" />
+
         <!-- 快速設定磚：手動記一筆 -->
         <service
             android:name=".RecordTileService"
