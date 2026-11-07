@@ -77,6 +77,16 @@ iPhone 版需自行用 Mac + Xcode 建置（Apple 限制，無法直接下載安
 - 分享下載連結給朋友：`https://github.com/taoyuant3-clm/PayLog/releases/latest`
 - 歡迎回報銀行通知格式、提出建議或送 Pull Request
 
+## 同一作者的其他 App
+
+| | App | 一句話 |
+|---|---|---|
+| 💳 | [嗶記帳 PayLog](https://github.com/taoyuant3-clm/PayLog) | 手機感應付款後自動彈出，三秒記好一筆帳 |
+| 📅 | [時記曆 TimeLog](https://github.com/taoyuant3-clm/TimeLog-Android) | 台港日三地假期一目了然的行事曆 |
+| 📦 | [拾存 SaveBox](https://github.com/taoyuant3-clm/SaveBox) | 看到喜歡的，一鍵分享就存好 |
+
+全部免費、沒有廣告、不用註冊，資料只存在你的手機。
+
 ---
 
 <a id="english"></a>
