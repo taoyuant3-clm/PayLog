@@ -14,3 +14,4 @@ android/keystore.properties
 ios/PayLog.xcodeproj/
 DerivedData/
 *.xcuserstate
+!releases/*.apk
