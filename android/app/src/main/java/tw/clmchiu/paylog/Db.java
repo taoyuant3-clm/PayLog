@@ -15,7 +15,7 @@ import java.util.Map;
 final class Db extends SQLiteOpenHelper {
 
     private static final String NAME = "paylog.db";
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
     private static Db instance;
 
     static synchronized Db get(Context c) {
@@ -49,6 +49,16 @@ final class Db extends SQLiteOpenHelper {
                 + "dedup TEXT NOT NULL DEFAULT '')");
         db.execSQL("CREATE INDEX idx_records_ts ON records(ts)");
         createPhotos(db);
+        createTrips(db);
+    }
+
+    /** v3：出差（一段日期區間，區間內的消費歸入該趟出差）。 */
+    private static void createTrips(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE trips ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "name TEXT NOT NULL DEFAULT '',"
+                + "start_day INTEGER NOT NULL,"
+                + "end_day INTEGER NOT NULL)");
     }
 
     /** v2：每筆消費可附多張照片（發票、收據）。檔案存在 App 私有目錄 files/photos/。 */
@@ -64,6 +74,88 @@ final class Db extends SQLiteOpenHelper {
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) createPhotos(db);
+        if (oldVersion < 3) createTrips(db);
+    }
+
+    // ───────── 出差 ─────────
+
+    private static Trip readTrip(Cursor c) {
+        Trip t = new Trip();
+        t.id = c.getLong(0);
+        t.name = c.getString(1);
+        t.startDay = c.getLong(2);
+        t.endDay = c.getLong(3);
+        return t;
+    }
+
+    private static ContentValues tripValues(Trip t) {
+        ContentValues v = new ContentValues();
+        v.put("name", t.name == null ? "" : t.name.trim());
+        v.put("start_day", t.startDay);
+        v.put("end_day", t.endDay);
+        return v;
+    }
+
+    /** 全部出差，由新到舊。 */
+    List<Trip> trips() {
+        List<Trip> out = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().query("trips",
+                new String[]{"id", "name", "start_day", "end_day"},
+                null, null, null, null, "start_day DESC, id DESC")) {
+            while (c.moveToNext()) out.add(readTrip(c));
+        }
+        return out;
+    }
+
+    Trip findTrip(long id) {
+        try (Cursor c = getReadableDatabase().query("trips",
+                new String[]{"id", "name", "start_day", "end_day"}, "id=?",
+                new String[]{String.valueOf(id)}, null, null, null)) {
+            return c.moveToFirst() ? readTrip(c) : null;
+        }
+    }
+
+    long saveTrip(Trip t) {
+        if (t.id > 0) {
+            getWritableDatabase().update("trips", tripValues(t), "id=?", new String[]{String.valueOf(t.id)});
+        } else {
+            t.id = getWritableDatabase().insert("trips", null, tripValues(t));
+        }
+        return t.id;
+    }
+
+    /** 這個時間點所屬的出差；不在任何出差期間回傳 null。 */
+    Trip tripAt(long millis) {
+        for (Trip t : trips()) if (t.contains(millis)) return t;
+        return null;
+    }
+
+    /** 只刪除出差設定；期間內的消費紀錄保留在主畫面。 */
+    void deleteTrip(long id) {
+        getWritableDatabase().delete("trips", "id=?", new String[]{String.valueOf(id)});
+    }
+
+    /** 與指定日期區間重疊的其他出差（排除 exceptId）；沒有則回傳 null。 */
+    Trip overlappingTrip(long startDay, long endDay, long exceptId) {
+        try (Cursor c = getReadableDatabase().query("trips",
+                new String[]{"id", "name", "start_day", "end_day"},
+                "id<>? AND start_day<=? AND end_day>=?",
+                new String[]{String.valueOf(exceptId), String.valueOf(endDay), String.valueOf(startDay)},
+                null, null, "start_day ASC", "1")) {
+            return c.moveToFirst() ? readTrip(c) : null;
+        }
+    }
+
+    /** 區間內已填寫紀錄依用途加總，金額大到小。 */
+    Map<String, Double> categoryTotals(long fromMillis, long toMillis) {
+        Map<String, Double> out = new LinkedHashMap<>();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT category, SUM(amount) FROM records WHERE pending=0 AND ts>=? AND ts<? "
+                        + "GROUP BY category ORDER BY SUM(amount) DESC",
+                new String[]{String.valueOf(fromMillis), String.valueOf(toMillis)})) {
+            while (c.moveToNext()) out.put(c.getString(0), c.getDouble(1));
+        }
+        return out;
     }
 
     // ───────── 照片 ─────────

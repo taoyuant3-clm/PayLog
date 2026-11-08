@@ -70,6 +70,12 @@
             android:exported="false"
             android:label="兩段期間比較" />
 
+        <!-- 出差頁（不同底色） -->
+        <activity
+            android:name=".TripActivity"
+            android:exported="false"
+            android:label="出差" />
+
         <!-- 快速設定磚：手動記一筆 -->
         <service
             android:name=".RecordTileService"

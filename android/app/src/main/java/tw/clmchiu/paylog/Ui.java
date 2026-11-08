@@ -46,6 +46,63 @@ final class Ui {
         return dark(c) ? 0xFFFBBF24 : 0xFFB45309;
     }
 
+    // ───────── 出差頁配色（暖沙色，和平時的白 / 灰明顯區分） ─────────
+
+    static int tripBg(Context c) {
+        return dark(c) ? 0xFF2A1E12 : 0xFFFFF1DC;
+    }
+
+    static int tripSurface(Context c) {
+        return dark(c) ? 0xFF36281A : 0xFFFFFAF1;
+    }
+
+    static int tripAccent(Context c) {
+        return dark(c) ? 0xFFFDBA74 : 0xFFC2410C;
+    }
+
+    /** 出差卡片：暖色底 + 橘色邊框。 */
+    static void tripCard(View v) {
+        Context c = v.getContext();
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(tripSurface(c));
+        g.setCornerRadius(dp(c, 16));
+        g.setStroke(dp(c, 1), (tripAccent(c) & 0x00FFFFFF) | 0x66000000);
+        v.setBackground(g);
+        int p = dp(c, 16);
+        v.setPadding(p, p, p, p);
+    }
+
+    /** 整個畫面（含狀態列、導覽列）換成出差底色。 */
+    @SuppressWarnings("deprecation")
+    static void tripWindow(Activity a, View root) {
+        int bg = tripBg(a);
+        root.setBackgroundColor(bg);
+        a.getWindow().getDecorView().setBackgroundColor(bg);
+        a.getWindow().setStatusBarColor(bg);
+        a.getWindow().setNavigationBarColor(bg);
+    }
+
+    static Button tripButton(Context c, CharSequence s) {
+        Button b = primaryButton(c, s);
+        b.setTextColor(dark(c) ? 0xFF2A1E12 : 0xFFFFFFFF);
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(tripAccent(c));
+        g.setCornerRadius(dp(c, 14));
+        b.setBackground(g);
+        return b;
+    }
+
+    static Button tripGhostButton(Context c, CharSequence s) {
+        Button b = ghostButton(c, s);
+        b.setTextColor(tripAccent(c));
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(0x00000000);
+        g.setCornerRadius(dp(c, 14));
+        g.setStroke(dp(c, 1), tripAccent(c));
+        b.setBackground(g);
+        return b;
+    }
+
     static int dp(Context c, float v) {
         return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
                 c.getResources().getDisplayMetrics()));

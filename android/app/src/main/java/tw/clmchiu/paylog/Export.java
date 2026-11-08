@@ -66,7 +66,7 @@ final class Export {
             if (list.length() > 0) names.put(r.id, list.toString());
         }
         zos.putNextEntry(new ZipEntry("嗶記帳.csv"));
-        zos.write(MainActivity.Csv.build(rows, names).getBytes(StandardCharsets.UTF_8));
+        zos.write(MainActivity.Csv.build(rows, names, db.trips()).getBytes(StandardCharsets.UTF_8));
         zos.closeEntry();
         zos.finish();
         zos.flush();

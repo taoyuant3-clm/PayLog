@@ -132,6 +132,7 @@ public class MainActivity extends Activity {
         Db db = Db.get(this);
         adapter.items = db.list(500);
         adapter.photoCounts = db.photoCounts();
+        adapter.trips = db.trips();
         adapter.notifyDataSetChanged();
         empty.setText(adapter.items.isEmpty()
                 ? "還沒有紀錄。\n開啟付款偵測後，用手機感應付款或網購收到驗證碼簡訊，就會自動彈出填寫畫面。"
@@ -206,6 +207,13 @@ public class MainActivity extends Activity {
                     }), Ui.topMargin(this, 12));
         }
 
+        // 出差中：顯示出差卡片，點一下進入出差頁
+        LocalDate today = LocalDate.now();
+        for (final Trip t : adapter.trips) {
+            if (!t.containsDay(today) && !(today.isBefore(t.start()) && t.startDay - today.toEpochDay() <= 3)) continue;
+            header.addView(tripBanner(db, t, today), Ui.topMargin(this, 12));
+        }
+
         // 本月合計
         LocalDate first = LocalDate.now().withDayOfMonth(1);
         ZoneId z = ZoneId.systemDefault();
@@ -264,6 +272,20 @@ public class MainActivity extends Activity {
         actions.addView(export, Ui.weight(1));
         header.addView(actions, Ui.topMargin(this, 12));
 
+        Button trips = Ui.tripGhostButton(this, "✈ 出差" + (adapter.trips.isEmpty() ? "（設定出差期間）" : "（" + adapter.trips.size() + " 趟）"));
+        trips.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TripActivity.showList(MainActivity.this, new Runnable() {
+                    @Override
+                    public void run() {
+                        refresh();
+                    }
+                });
+            }
+        });
+        header.addView(trips, Ui.topMargin(this, 10));
+
         if (!adapter.items.isEmpty()) {
             header.addView(Ui.label(this, "最近紀錄"));
         }
@@ -284,9 +306,40 @@ public class MainActivity extends Activity {
         return b;
     }
 
+    /** 主畫面上的出差卡片（出差中，或 3 天內出發）。 */
+    private View tripBanner(Db db, final Trip t, LocalDate today) {
+        LinearLayout b = Ui.vbox(this);
+        Ui.tripCard(b);
+        int idx = t.dayIndex(today);
+        TextView title = Ui.text(this, "✈ " + t.displayName() + (idx > 0
+                ? "  ·  出差中 第 " + idx + " / " + t.days() + " 天"
+                : "  ·  " + (t.startDay - today.toEpochDay()) + " 天後出發"), 15, true);
+        title.setTextColor(Ui.tripAccent(this));
+        b.addView(title);
+        Double sum = db.totals(t.startMillis(), t.endMillis()).get("");
+        TextView d = Ui.text(this, t.rangeLabel() + "\n出差支出 " + Fmt.money(sum == null ? 0 : sum)
+                + "  ·  點此查看出差頁", 13, false);
+        d.setTextColor(Ui.muted(this));
+        d.setPadding(0, Ui.dp(this, 4), 0, 0);
+        b.addView(d);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TripActivity.open(MainActivity.this, t.id);
+            }
+        });
+        return b;
+    }
+
+    private static Trip tripOf(List<Trip> trips, long millis) {
+        for (Trip t : trips) if (t.contains(millis)) return t;
+        return null;
+    }
+
     private final class Adapter extends BaseAdapter {
         List<Record> items = new ArrayList<>();
         Map<Long, Integer> photoCounts = new java.util.HashMap<>();
+        List<Trip> trips = new ArrayList<>();
 
         @Override
         public int getCount() {
@@ -314,21 +367,19 @@ public class MainActivity extends Activity {
             }
             Record rec = items.get(position);
             Integer pc = photoCounts.get(rec.id);
-            row.bind(rec, pc == null ? 0 : pc);
+            row.bind(rec, pc == null ? 0 : pc, tripOf(trips, rec.timeMillis));
             return row.root;
         }
     }
 
     private static final class Row {
-        final LinearLayout root;
+        final LinearLayout root, box;
         final TextView when, amount, detail;
 
         Row(Context c) {
             LinearLayout outer = Ui.vbox(c);
             outer.setPadding(0, Ui.dp(c, 4), 0, Ui.dp(c, 4));
-            LinearLayout box = Ui.vbox(c);
-            Ui.card(box);
-            box.setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 12));
+            box = Ui.vbox(c);
             LinearLayout line1 = Ui.hbox(c);
             line1.setGravity(Gravity.CENTER_VERTICAL);
             when = Ui.text(c, "", 13, false);
@@ -347,11 +398,17 @@ public class MainActivity extends Activity {
             root.setTag(this);
         }
 
-        void bind(Record r, int photoCount) {
+        /** @param trip 這筆所屬的出差（出差期間的紀錄用暖色卡片標示），可為 null */
+        void bind(Record r, int photoCount, Trip trip) {
             Context c = root.getContext();
+            if (trip != null) Ui.tripCard(box);
+            else Ui.card(box);
+            box.setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 12));
             String card = TextUtils.isEmpty(r.card) ? "" : "  ·  " + r.card;
             String pics = photoCount > 0 ? "  ·  📎" + photoCount : "";
-            when.setText(Fmt.format(r.timeMillis, Fmt.SHORT) + card + pics);
+            String tripTag = trip == null ? "" : "  ·  ✈ " + trip.displayName();
+            when.setText(Fmt.format(r.timeMillis, Fmt.SHORT) + card + pics + tripTag);
+            when.setTextColor(trip == null ? Ui.muted(c) : Ui.tripAccent(c));
             amount.setText(r.amount > 0 ? Fmt.money(r.amount) : "NT$ —");
             if (r.pending) {
                 detail.setText("⚠ 待填寫 — 點此補填" + (TextUtils.isEmpty(r.sourceLabel) ? "" : "（" + r.sourceLabel + "）"));
@@ -582,6 +639,15 @@ public class MainActivity extends Activity {
         });
         box.addView(compare, Ui.topMargin(this, 16));
 
+        Button imp = Ui.ghostButton(this, "匯入備份（還原紀錄 / 照片）");
+        imp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startImport();
+            }
+        });
+        box.addView(imp, Ui.topMargin(this, 10));
+
         Button cats = Ui.ghostButton(this, "管理用途（新增 / 刪除）");
         cats.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -730,6 +796,7 @@ public class MainActivity extends Activity {
     // ───────────────────────── 匯出 ─────────────────────────
 
     private static final int REQ_EXPORT_ZIP = 24;
+    private static final int REQ_IMPORT = 25;
 
     private void startExport() {
         new AlertDialog.Builder(this)
@@ -740,6 +807,31 @@ public class MainActivity extends Activity {
                         createExportFile(which == 1);
                     }
                 })
+                .show();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void startImport() {
+        new AlertDialog.Builder(this)
+                .setTitle("匯入備份")
+                .setMessage("選擇本 App 匯出的 CSV 或 ZIP（ZIP 可一併還原發票照片）。\n\n匯入是「新增」到現有資料，請勿對同一份備份匯入兩次，以免重複。")
+                .setPositiveButton("選擇檔案", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                                .addCategory(Intent.CATEGORY_OPENABLE)
+                                .setType("*/*")
+                                .putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                                        "application/zip", "text/csv",
+                                        "text/comma-separated-values", "application/octet-stream"});
+                        try {
+                            startActivityForResult(i, REQ_IMPORT);
+                        } catch (ActivityNotFoundException e) {
+                            Toast.makeText(MainActivity.this, "找不到檔案管理員", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .setNegativeButton("取消", null)
                 .show();
     }
 
@@ -761,6 +853,26 @@ public class MainActivity extends Activity {
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_IMPORT) {
+            if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+            final Uri src = data.getData();
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    final ImportBackup.Result res = ImportBackup.run(MainActivity.this, src);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            String m = res.error != null ? "匯入失敗：" + res.error
+                                    : "已匯入 " + res.records + " 筆" + (res.photos > 0 ? "、" + res.photos + " 張照片" : "");
+                            Toast.makeText(MainActivity.this, m, Toast.LENGTH_LONG).show();
+                            refresh();
+                        }
+                    });
+                }
+            }, "paylog-import").start();
+            return;
+        }
         if ((requestCode != REQ_EXPORT && requestCode != REQ_EXPORT_ZIP)
                 || resultCode != RESULT_OK || data == null || data.getData() == null) return;
         final boolean zip = requestCode == REQ_EXPORT_ZIP;
@@ -777,7 +889,7 @@ public class MainActivity extends Activity {
                         int n = Export.zip(MainActivity.this, db, all, os);
                         msg = "已匯出 " + all.size() + " 筆、" + n + " 張照片";
                     } else {
-                        os.write(Csv.build(all, Export.photoCountsAsNames(db, all)).getBytes(StandardCharsets.UTF_8));
+                        os.write(Csv.build(all, Export.photoCountsAsNames(db, all), db.trips()).getBytes(StandardCharsets.UTF_8));
                         msg = "已匯出 " + all.size() + " 筆";
                     }
                 } catch (Exception e) {
@@ -806,9 +918,10 @@ public class MainActivity extends Activity {
         }
 
         /** @param photoNames 每筆紀錄寫進「照片」欄的文字（ZIP 內檔名或張數），可為 null */
-        static String build(List<Record> rows, Map<Long, String> photoNames) {
+        /** @param trips 出差清單，用來填「出差」欄（出差期間的紀錄填出差名稱）；可為 null */
+        static String build(List<Record> rows, Map<Long, String> photoNames, List<Trip> trips) {
             StringBuilder sb = new StringBuilder("\uFEFF");
-            sb.append("日期,時間,消費總值,支付卡,用途,備註,商家,地點,緯度,經度,來源,狀態,照片\r\n");
+            sb.append("日期,時間,消費總值,支付卡,用途,備註,商家,地點,緯度,經度,來源,狀態,照片,出差\r\n");
             for (Record r : rows) {
                 sb.append(Fmt.format(r.timeMillis, Fmt.DATE)).append(',')
                         .append(Fmt.format(r.timeMillis, Fmt.TIME)).append(',')
@@ -822,7 +935,8 @@ public class MainActivity extends Activity {
                         .append(r.hasLocation() ? String.format(Locale.ROOT, "%.6f", r.lng) : "").append(',')
                         .append(esc(TextUtils.isEmpty(r.sourceLabel) ? "手動" : r.sourceLabel)).append(',')
                         .append(r.pending ? "待填寫" : "已填寫").append(',')
-                        .append(esc(photoNames == null || photoNames.get(r.id) == null ? "" : photoNames.get(r.id)))
+                        .append(esc(photoNames == null || photoNames.get(r.id) == null ? "" : photoNames.get(r.id))).append(',')
+                        .append(esc(trips == null || tripOf(trips, r.timeMillis) == null ? "" : tripOf(trips, r.timeMillis).displayName()))
                         .append("\r\n");
             }
             return sb.toString();

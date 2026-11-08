@@ -58,6 +58,8 @@ import java.util.Locale;
 public class RecordActivity extends Activity {
 
     static final String EXTRA_ID = "record_id";
+    /** 新紀錄的預設時間（從出差頁事後補記時帶入）。 */
+    static final String EXTRA_TIME = "record_time";
     private static final int REQ_LOCATION = 11;
     private static final long LOCATE_TIMEOUT_MS = 20_000L;
 
@@ -100,7 +102,7 @@ public class RecordActivity extends Activity {
         record = id > 0 ? Db.get(this).find(id) : null;
         if (record == null) {
             record = new Record();
-            record.timeMillis = System.currentTimeMillis();
+            record.timeMillis = getIntent().getLongExtra(EXTRA_TIME, System.currentTimeMillis());
             record.pending = true;
             isNew = true;
         }
@@ -168,6 +170,15 @@ public class RecordActivity extends Activity {
 
         TextView title = Ui.text(this, record.pending ? "記錄這筆消費" : "編輯消費", 24, true);
         col.addView(title);
+        // 付款時間落在出差期間：換成出差底色並標示
+        Trip trip = Db.get(this).tripAt(record.timeMillis);
+        if (trip != null) {
+            Ui.tripWindow(this, scroll);
+            TextView tag = Ui.text(this, "✈ 出差：" + trip.displayName(), 14, true);
+            tag.setTextColor(Ui.tripAccent(this));
+            tag.setPadding(0, Ui.dp(this, 2), 0, Ui.dp(this, 2));
+            col.addView(tag);
+        }
         String sub = TextUtils.isEmpty(record.sourceLabel)
                 ? "日期、時間、地點會自動帶入"
                 : "偵測自 " + record.sourceLabel + " · 日期、時間、地點已自動帶入";
