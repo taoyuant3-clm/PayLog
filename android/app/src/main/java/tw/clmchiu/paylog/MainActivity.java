@@ -655,26 +655,34 @@ public class MainActivity extends Activity {
         });
         box.addView(compare, Ui.topMargin(this, 16));
 
-        Button myCards = Ui.primaryButton(this, "我的卡片 / 付款方式（" + Db.get(this).cards().size() + "）");
+        final Button myCards = Ui.primaryButton(this, "我的卡片 / 付款方式（" + Db.get(this).cards().size() + "）");
         myCards.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                CardsUi.showList(MainActivity.this, null);
+                CardsUi.showList(MainActivity.this, new Runnable() {
+                    @Override
+                    public void run() {
+                        // 新增 / 刪除卡片後更新按鈕上的張數（設定視窗仍開著）
+                        myCards.setText("我的卡片 / 付款方式（" + Db.get(MainActivity.this).cards().size() + "）");
+                    }
+                });
             }
         });
         box.addView(myCards, Ui.topMargin(this, 16));
 
-        Button rates = Ui.ghostButton(this, "外幣匯率（" + (Prefs.autoRates(this) ? "每天早上 7 點自動更新" : "手動") + "）");
+        final Button rates = Ui.ghostButton(this, ratesButtonLabel());
         rates.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 showRates();
             }
         });
+        ratesBtn = rates;
         box.addView(rates, Ui.topMargin(this, 10));
 
         int sk = Prefs.skipped(this).size();
-        Button skipped = Ui.ghostButton(this, "未辨識的付款通知（" + sk + "）");
+        final Button skipped = Ui.ghostButton(this, "未辨識的付款通知（" + sk + "）");
+        skippedBtn = skipped;
         skipped.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -809,8 +817,16 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    /** 設定視窗開著時，子視窗改了資料要同步更新的按鈕。 */
+    private Button ratesBtn, skippedBtn;
+
+    private String ratesButtonLabel() {
+        return "外幣匯率（" + (Prefs.autoRates(this) ? "每天早上 7 點自動更新" : "手動") + "）";
+    }
+
     /** 外幣匯率：點一下修改。 */
     private void showRates() {
+        if (ratesBtn != null) ratesBtn.setText(ratesButtonLabel());
         final String[][] F = PaymentParser.FOREIGN;
         String[] items = new String[F.length];
         for (int i = 0; i < F.length; i++) {
@@ -972,6 +988,7 @@ public class MainActivity extends Activity {
                     @Override
                     public void onClick(DialogInterface d, int w) {
                         Prefs.clearSkipped(MainActivity.this);
+                        if (skippedBtn != null) skippedBtn.setText("未辨識的付款通知（0）");
                     }
                 })
                 .setNegativeButton("關閉", null)

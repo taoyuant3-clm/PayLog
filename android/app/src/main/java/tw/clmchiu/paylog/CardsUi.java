@@ -57,6 +57,12 @@ final class CardsUi {
                 }
             });
         }
+        b.setOnCancelListener(new DialogInterface.OnCancelListener() {
+            @Override
+            public void onCancel(DialogInterface d) {
+                if (onChanged != null) onChanged.run();   // 按返回鍵關閉也更新
+            }
+        });
         b.show();
     }
 
