@@ -113,6 +113,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refresh();
+        RateUpdater.ensure(this);
     }
 
     private Record itemAt(int listPosition) {
@@ -663,7 +664,7 @@ public class MainActivity extends Activity {
         });
         box.addView(myCards, Ui.topMargin(this, 16));
 
-        Button rates = Ui.ghostButton(this, "外幣匯率（出國刷卡自動換算台幣）");
+        Button rates = Ui.ghostButton(this, "外幣匯率（" + (Prefs.autoRates(this) ? "每天早上 7 點自動更新" : "手動") + "）");
         rates.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -709,7 +710,7 @@ public class MainActivity extends Activity {
         });
         box.addView(access, Ui.topMargin(this, 10));
 
-        TextView about = Ui.text(this, "所有紀錄僅儲存在本機。版本 " + versionName(), 12, false);
+        TextView about = Ui.text(this, "所有紀錄僅儲存在本機（只會下載公開匯率表）。版本 " + versionName(), 12, false);
         about.setTextColor(Ui.muted(this));
         about.setPadding(0, Ui.dp(this, 16), 0, 0);
         box.addView(about);
@@ -818,12 +819,52 @@ public class MainActivity extends Activity {
             items[i] = PaymentParser.FOREIGN_SYMBOL[i] + "  " + code + "　1 = NT$" + Fmt.plainNumber(Prefs.rate(this, code))
                     + (custom ? "（自訂）" : "");
         }
+        final boolean auto = Prefs.autoRates(this);
+        LinearLayout head = Ui.vbox(this);
+        int hp = Ui.dp(this, 20);
+        head.setPadding(hp, hp, hp, Ui.dp(this, 4));
+        head.addView(Ui.text(this, "外幣匯率（1 外幣 = ? 台幣）", 18, true));
+        TextView sub = Ui.text(this, (auto ? "每天當地早上 7 點自動更新\n" : "自動更新已關閉\n")
+                + RateUpdater.updatedLabel(this), 12, false);
+        sub.setTextColor(Ui.muted(this));
+        head.addView(sub);
         new AlertDialog.Builder(this)
-                .setTitle("外幣匯率（點一下修改）")
+                .setCustomTitle(head)
                 .setItems(items, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface d, int which) {
                         editRate(F[which][0]);
+                    }
+                })
+                .setPositiveButton("立即更新", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        Toast.makeText(MainActivity.this, "更新匯率中…", Toast.LENGTH_SHORT).show();
+                        new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                final boolean ok = RateUpdater.updateNow(MainActivity.this);
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Toast.makeText(MainActivity.this, ok ? "匯率已更新" : "更新失敗，請確認網路連線",
+                                                Toast.LENGTH_SHORT).show();
+                                        showRates();
+                                    }
+                                });
+                            }
+                        }, "paylog-rates").start();
+                    }
+                })
+                .setNeutralButton(auto ? "關閉每日自動更新" : "開啟每日自動更新", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        Prefs.setAutoRates(MainActivity.this, !auto);
+                        if (!auto) RateUpdater.ensure(MainActivity.this);
+                        else RateUpdater.cancel(MainActivity.this);
+                        Toast.makeText(MainActivity.this, !auto ? "已開啟：每天當地早上 7 點自動更新" : "已關閉自動更新",
+                                Toast.LENGTH_SHORT).show();
+                        showRates();
                     }
                 })
                 .setNegativeButton("完成", null)
@@ -839,7 +880,8 @@ public class MainActivity extends Activity {
         int p = Ui.dp(this, 20);
         box.setPadding(p, Ui.dp(this, 8), p, 0);
         TextView h = Ui.text(this, "1 " + code + " = ? 台幣（預設 " + Fmt.plainNumber(Prefs.defaultRate(code))
-                + "）。信用卡實際入帳金額以帳單為準，可在每筆紀錄直接改。", 13, false);
+                + "）。信用卡實際入帳金額以帳單為準，可在每筆紀錄直接改。"
+                + (Prefs.autoRates(this) ? "\n\n注意：每日自動更新開著，明早 7 點會被新牌告覆蓋。" : ""), 13, false);
         h.setTextColor(Ui.muted(this));
         box.addView(h);
         box.addView(et, Ui.matchWrap());

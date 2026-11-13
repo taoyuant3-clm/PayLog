@@ -206,6 +206,31 @@ final class Prefs {
         else sp(c).edit().remove(K_RATE + code).apply();
     }
 
+    private static final String K_AUTO_RATES = "auto_rates";
+    private static final String K_RATES_AT = "rates_updated_at";
+    private static final String K_RATES_SRC = "rates_source";
+
+    /** 每天當地早上 7 點自動更新匯率（預設開）。 */
+    static boolean autoRates(Context c) {
+        return sp(c).getBoolean(K_AUTO_RATES, true);
+    }
+
+    static void setAutoRates(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_AUTO_RATES, v).apply();
+    }
+
+    static long ratesUpdatedAt(Context c) {
+        return sp(c).getLong(K_RATES_AT, 0);
+    }
+
+    static String ratesSource(Context c) {
+        return sp(c).getString(K_RATES_SRC, "");
+    }
+
+    static void setRatesUpdated(Context c, long at, String source) {
+        sp(c).edit().putLong(K_RATES_AT, at).putString(K_RATES_SRC, source == null ? "" : source).apply();
+    }
+
     // ───────── 略過的通知（診斷用，只存在本機，最多 30 則） ─────────
 
     private static final String K_SKIPPED = "skipped_notifications";
