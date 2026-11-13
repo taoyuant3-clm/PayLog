@@ -126,11 +126,13 @@ public class TripActivity extends Activity {
         sum.addView(avg);
 
         LinearLayout cards = Ui.hbox(this);
-        for (String card : PaymentParser.CARDS) {
+        for (String card : MainActivity.topCards(byCard)) {
             Double v = byCard.get(card);
             LinearLayout cell = Ui.vbox(this);
             TextView ck = Ui.text(this, card, 12, false);
             ck.setTextColor(Ui.muted(this));
+            ck.setSingleLine(true);
+            ck.setEllipsize(TextUtils.TruncateAt.END);
             cell.addView(ck);
             cell.addView(Ui.text(this, Fmt.money(v == null ? 0 : v), 15, true));
             cards.addView(cell, Ui.weight(1));
@@ -283,6 +285,7 @@ public class TripActivity extends Activity {
             t.endDay = today.plusDays(9).toEpochDay();
         }
         final long[] days = {t.startDay, t.endDay};
+        final String[] cur = {t.currency == null ? "" : t.currency};
 
         LinearLayout box = Ui.vbox(a);
         int p = Ui.dp(a, 20);
@@ -303,6 +306,9 @@ public class TripActivity extends Activity {
         box.addView(Ui.label(a, "回程日（含當天）"));
         final Button endBtn = Ui.tripGhostButton(a, LocalDate.ofEpochDay(days[1]).format(Fmt.DATE));
         box.addView(endBtn, Ui.matchWrap());
+        box.addView(Ui.label(a, "當地幣別（通知只寫 $、元、¥ 時用）"));
+        final Button curBtn = Ui.tripGhostButton(a, "");
+        box.addView(curBtn, Ui.matchWrap());
         final TextView len = Ui.text(a, "", 13, false);
         len.setTextColor(Ui.muted(a));
         len.setPadding(0, Ui.dp(a, 8), 0, 0);
@@ -319,6 +325,7 @@ public class TripActivity extends Activity {
                 startBtn.setText(LocalDate.ofEpochDay(days[0]).format(Fmt.DATE));
                 endBtn.setText(LocalDate.ofEpochDay(days[1]).format(Fmt.DATE));
                 len.setText("共 " + (days[1] - days[0] + 1) + " 天；這段期間的消費會歸入這趟出差");
+                curBtn.setText(cur[0].isEmpty() ? "自動（依通知寫的幣別）" : Card.currencyName(cur[0]) + "（" + cur[0] + "）");
             }
         };
         sync.run();
@@ -336,6 +343,27 @@ public class TripActivity extends Activity {
                 }, cur.getYear(), cur.getMonthValue() - 1, cur.getDayOfMonth()).show();
             }
         };
+        curBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final String[] codes = new String[Card.CURRENCIES.length + 1];
+                String[] names = new String[codes.length];
+                codes[0] = "";
+                names[0] = "自動（依通知寫的幣別）";
+                for (int i = 0; i < Card.CURRENCIES.length; i++) {
+                    codes[i + 1] = Card.CURRENCIES[i];
+                    names[i + 1] = Card.CURRENCY_NAMES[i] + "（" + Card.CURRENCIES[i] + "）";
+                }
+                new AlertDialog.Builder(a).setTitle("當地幣別")
+                        .setItems(names, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface d, int w) {
+                                cur[0] = codes[w];
+                                sync.run();
+                            }
+                        }).show();
+            }
+        });
         startBtn.setOnClickListener(pick);
         endBtn.setOnClickListener(pick);
 
@@ -383,6 +411,7 @@ public class TripActivity extends Activity {
                         t.name = n;
                         t.startDay = days[0];
                         t.endDay = days[1];
+                        t.currency = cur[0];
                         Db.get(a).saveTrip(t);
                         dlg.dismiss();
                         if (onSaved != null) onSaved.run();

@@ -207,19 +207,32 @@ public class RecordActivity extends Activity {
             fill.addView(fx);
         }
 
-        fill.addView(Ui.label(this, "支付卡"));
+        LinearLayout cardHead = Ui.hbox(this);
+        cardHead.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        cardHead.addView(Ui.label(this, "支付卡 / 付款方式（左右滑動）"), Ui.weight(1));
+        TextView manage = Ui.text(this, "管理卡片", 13, true);
+        manage.setTextColor(Ui.brand(this));
+        manage.setPadding(Ui.dp(this, 12), Ui.dp(this, 16), 0, Ui.dp(this, 6));
+        manage.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                CardsUi.showList(RecordActivity.this, new Runnable() {
+                    @Override
+                    public void run() {
+                        View checked = cardGroup.findViewById(cardGroup.getCheckedRadioButtonId());
+                        fillCards(checked == null ? record.card : String.valueOf(checked.getTag()));
+                    }
+                });
+            }
+        });
+        cardHead.addView(manage);
+        fill.addView(cardHead, Ui.matchWrap());
+        HorizontalScrollView cardScroll = new HorizontalScrollView(this);
+        cardScroll.setHorizontalScrollBarEnabled(false);
         cardGroup = new RadioGroup(this);
         cardGroup.setOrientation(RadioGroup.HORIZONTAL);
-        for (int i = 0; i < PaymentParser.CARDS.length; i++) {
-            RadioButton rb = new RadioButton(this);
-            rb.setId(View.generateViewId());
-            rb.setText(PaymentParser.CARDS[i]);
-            rb.setTag(PaymentParser.CARDS[i]);
-            rb.setTextSize(16);
-            cardGroup.addView(rb, new RadioGroup.LayoutParams(0,
-                    RadioGroup.LayoutParams.WRAP_CONTENT, 1f));
-        }
-        fill.addView(cardGroup, Ui.matchWrap());
+        cardScroll.addView(cardGroup);
+        fill.addView(cardScroll, Ui.matchWrap());
 
         fill.addView(Ui.label(this, "用途"));
         categorySp = new Spinner(this);
@@ -379,10 +392,7 @@ public class RecordActivity extends Activity {
 
         String card = !TextUtils.isEmpty(record.card) ? record.card
                 : (isNew || record.pending ? Prefs.lastCard(this) : "");
-        for (int i = 0; i < cardGroup.getChildCount(); i++) {
-            View v = cardGroup.getChildAt(i);
-            if (card.equals(v.getTag())) cardGroup.check(v.getId());
-        }
+        fillCards(card);
 
         String cat = !TextUtils.isEmpty(record.category) ? record.category : Prefs.lastCategory(this);
         loadCategories(cat);
@@ -444,6 +454,21 @@ public class RecordActivity extends Activity {
             }
         },
                 t.getHour(), t.getMinute(), true).show();
+    }
+
+    /** 支付卡選項：我的卡片在前，再列一般卡別；選中 select。 */
+    private void fillCards(String select) {
+        cardGroup.removeAllViews();
+        for (String name : Card.choices(this, select)) {
+            RadioButton rb = new RadioButton(this);
+            rb.setId(View.generateViewId());
+            rb.setText(name);
+            rb.setTag(name);
+            rb.setTextSize(15);
+            rb.setPadding(0, 0, Ui.dp(this, 14), 0);
+            cardGroup.addView(rb);
+            if (name.equals(select)) cardGroup.check(rb.getId());
+        }
     }
 
     // ───────────────────────── 儲存 ─────────────────────────

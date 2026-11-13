@@ -15,7 +15,7 @@ import java.util.Map;
 final class Db extends SQLiteOpenHelper {
 
     private static final String NAME = "paylog.db";
-    private static final int VERSION = 4;
+    private static final int VERSION = 5;
     private static Db instance;
 
     static synchronized Db get(Context c) {
@@ -51,6 +51,20 @@ final class Db extends SQLiteOpenHelper {
         createPhotos(db);
         createTrips(db);
         addCurrency(db);
+        addCards(db);
+    }
+
+    /** v5：我的卡片（同卡別多張、不同發卡地 / 幣別）＋ 出差幣別。 */
+    private static void addCards(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE cards ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "name TEXT NOT NULL DEFAULT '',"
+                + "brand TEXT NOT NULL DEFAULT '',"
+                + "last4 TEXT NOT NULL DEFAULT '',"
+                + "bank TEXT NOT NULL DEFAULT '',"
+                + "currency TEXT NOT NULL DEFAULT '',"
+                + "sort INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("ALTER TABLE trips ADD COLUMN currency TEXT NOT NULL DEFAULT ''");
     }
 
     /** v4：外幣（出國刷卡時記下原幣與原始金額，amount 為換算後台幣）。 */
@@ -83,9 +97,12 @@ final class Db extends SQLiteOpenHelper {
         if (oldVersion < 2) createPhotos(db);
         if (oldVersion < 3) createTrips(db);
         if (oldVersion < 4) addCurrency(db);
+        if (oldVersion < 5) addCards(db);
     }
 
     // ───────── 出差 ─────────
+
+    private static final String[] TRIP_COLS = {"id", "name", "start_day", "end_day", "currency"};
 
     private static Trip readTrip(Cursor c) {
         Trip t = new Trip();
@@ -93,7 +110,49 @@ final class Db extends SQLiteOpenHelper {
         t.name = c.getString(1);
         t.startDay = c.getLong(2);
         t.endDay = c.getLong(3);
+        t.currency = c.getString(4);
         return t;
+    }
+
+    // ───────── 我的卡片 ─────────
+
+    List<Card> cards() {
+        List<Card> out = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().query("cards",
+                new String[]{"id", "name", "brand", "last4", "bank", "currency"},
+                null, null, null, null, "sort ASC, id ASC")) {
+            while (c.moveToNext()) {
+                Card k = new Card();
+                k.id = c.getLong(0);
+                k.name = c.getString(1);
+                k.brand = c.getString(2);
+                k.last4 = c.getString(3);
+                k.bank = c.getString(4);
+                k.currency = c.getString(5);
+                out.add(k);
+            }
+        }
+        return out;
+    }
+
+    long saveCard(Card k) {
+        ContentValues v = new ContentValues();
+        v.put("name", k.name == null ? "" : k.name.trim());
+        v.put("brand", k.brand == null ? "" : k.brand);
+        v.put("last4", k.last4 == null ? "" : k.last4.trim());
+        v.put("bank", k.bank == null ? "" : k.bank.trim());
+        v.put("currency", k.currency == null ? "" : k.currency);
+        if (k.id > 0) {
+            getWritableDatabase().update("cards", v, "id=?", new String[]{String.valueOf(k.id)});
+        } else {
+            k.id = getWritableDatabase().insert("cards", null, v);
+        }
+        return k.id;
+    }
+
+    /** 只刪除卡片設定，已記錄的消費保留原名稱。 */
+    void deleteCard(long id) {
+        getWritableDatabase().delete("cards", "id=?", new String[]{String.valueOf(id)});
     }
 
     private static ContentValues tripValues(Trip t) {
@@ -101,6 +160,7 @@ final class Db extends SQLiteOpenHelper {
         v.put("name", t.name == null ? "" : t.name.trim());
         v.put("start_day", t.startDay);
         v.put("end_day", t.endDay);
+        v.put("currency", t.currency == null ? "" : t.currency);
         return v;
     }
 
@@ -108,8 +168,7 @@ final class Db extends SQLiteOpenHelper {
     List<Trip> trips() {
         List<Trip> out = new ArrayList<>();
         try (Cursor c = getReadableDatabase().query("trips",
-                new String[]{"id", "name", "start_day", "end_day"},
-                null, null, null, null, "start_day DESC, id DESC")) {
+                TRIP_COLS, null, null, null, null, "start_day DESC, id DESC")) {
             while (c.moveToNext()) out.add(readTrip(c));
         }
         return out;
@@ -117,7 +176,7 @@ final class Db extends SQLiteOpenHelper {
 
     Trip findTrip(long id) {
         try (Cursor c = getReadableDatabase().query("trips",
-                new String[]{"id", "name", "start_day", "end_day"}, "id=?",
+                TRIP_COLS, "id=?",
                 new String[]{String.valueOf(id)}, null, null, null)) {
             return c.moveToFirst() ? readTrip(c) : null;
         }
@@ -146,8 +205,7 @@ final class Db extends SQLiteOpenHelper {
     /** 與指定日期區間重疊的其他出差（排除 exceptId）；沒有則回傳 null。 */
     Trip overlappingTrip(long startDay, long endDay, long exceptId) {
         try (Cursor c = getReadableDatabase().query("trips",
-                new String[]{"id", "name", "start_day", "end_day"},
-                "id<>? AND start_day<=? AND end_day>=?",
+                TRIP_COLS, "id<>? AND start_day<=? AND end_day>=?",
                 new String[]{String.valueOf(exceptId), String.valueOf(endDay), String.valueOf(startDay)},
                 null, null, "start_day ASC", "1")) {
             return c.moveToFirst() ? readTrip(c) : null;

@@ -14,6 +14,7 @@ final class Trip {
     String name = "";   // 例如：馬來西亞出差
     long startDay;      // LocalDate.toEpochDay()
     long endDay;        // 含當天
+    String currency = "";   // 當地幣別（例如 HKD）；通知只寫「$」「元」時用；"" = 自動
 
     private static final DateTimeFormatter MD = DateTimeFormatter.ofPattern("M/d");
     private static final DateTimeFormatter YMD = DateTimeFormatter.ofPattern("yyyy/M/d");

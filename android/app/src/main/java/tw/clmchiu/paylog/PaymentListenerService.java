@@ -26,7 +26,7 @@ public class PaymentListenerService extends NotificationListenerService {
     /** 聊天 / 社群 App 不偵測，避免把對話中的金額誤判成付款。 */
     private static final String[] IGNORED_PACKAGES = {
             "jp.naver.line.android", "com.facebook.orca", "com.facebook.katana", "com.whatsapp",
-            "org.telegram.messenger", "com.instagram.android", "com.tencent.mm", "com.discord",
+            "org.telegram.messenger", "com.instagram.android", "com.discord",
             "com.google.android.gm", "com.google.android.youtube"
     };
 
@@ -101,13 +101,20 @@ public class PaymentListenerService extends NotificationListenerService {
             return;
         }
 
-        boolean wallet = Prefs.isWallet(pkg);
-        if (!wallet && !Prefs.watchAllApps(this)) return;
-
         String text = collectText(n.extras);
         if (text.isEmpty()) return;
 
-        PaymentParser.Result p = PaymentParser.parse(text);
+        // 微信、支付寶：同時是聊天 / 生活 App，只認付款通知，避免把聊天內容、紅包活動當成消費
+        String method = Card.methodForPackage(pkg);
+        if (Card.WECHAT.equals(method) || Card.ALIPAY.equals(method)) {
+            handleSuperApp(n, pkg, method, text);
+            return;
+        }
+
+        boolean wallet = Prefs.isWallet(pkg) || method != null;
+        if (!wallet && !Prefs.watchAllApps(this)) return;
+
+        PaymentParser.Result p = Card.analyze(this, text, pkg, System.currentTimeMillis());
 
         boolean has = PaymentParser.hasAmount(p);
         boolean isPayment;
@@ -123,6 +130,40 @@ public class PaymentListenerService extends NotificationListenerService {
         }
 
         Detector.onPayment(this, p, pkg, appLabel(n.extras, pkg));
+    }
+
+    private static final String[] SUPER_APP_PAY = {
+            "支付成功", "付款成功", "已支付", "支付凭证", "支付憑證", "付款凭证", "付款憑證", "扣款成功", "支出",
+            "消费", "消費", "交易提醒", "付款", "支付", "payment", "paid"
+    };
+
+    /**
+     * 微信：只看標題是「微信支付」「WeChat Pay」的通知（聊天訊息的標題是好友名字）。
+     * 支付寶：要有付款字樣，而且不是紅包 / 優惠推播。
+     */
+    private void handleSuperApp(Notification n, String pkg, String method, String text) {
+        CharSequence tcs = n.extras == null ? null : n.extras.getCharSequence(Notification.EXTRA_TITLE);
+        String title = tcs == null ? "" : tcs.toString();
+        if (Card.WECHAT.equals(method)) {
+            String tl = title.toLowerCase(Locale.ROOT);
+            boolean payTitle = title.contains("微信支付") || tl.contains("wechat pay")
+                    || title.contains("支付通知") || title.contains("扣费") || title.contains("扣費");
+            if (!payTitle) return;
+        }
+        if (PaymentParser.looksLikePromo(text)) return;
+        String lower = text.toLowerCase(Locale.ROOT);
+        boolean payWord = false;
+        for (String w : SUPER_APP_PAY) {
+            if (lower.contains(w)) {
+                payWord = true;
+                break;
+            }
+        }
+        if (!payWord) return;
+        if (text.contains("收款") && !text.contains("付款") && !text.contains("支出")) return;   // 別人付錢給你
+        PaymentParser.Result p = Card.analyze(this, text, pkg, System.currentTimeMillis());
+        if (p.card == null) p.card = method;
+        Detector.onPayment(this, p, pkg, method);
     }
 
     private static boolean isSmsApp(String pkg) {

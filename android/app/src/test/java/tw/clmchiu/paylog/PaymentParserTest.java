@@ -145,4 +145,72 @@ public class PaymentParserTest {
         assertFalse(PaymentParser.isCardSpendSms("日本限時優惠！刷卡滿 ¥10,000 回饋 5%"));
         assertFalse(PaymentParser.isCardSpendSms("您的信用卡交易金額NT$1,280，OTP驗證碼：482913"));
     }
+
+    // ───────── 多張卡 / 香港 / 大陸 / 微信 / 支付寶 ─────────
+
+    @Test
+    public void last4Formats() {
+        assertEquals("1234", PaymentParser.findLast4("Visa ••1234"));
+        assertEquals("5678", PaymentParser.findLast4("您的卡號末四碼5678消費"));
+        assertEquals("8899", PaymentParser.findLast4("尾号8899的银联卡消费"));
+        assertEquals("4321", PaymentParser.findLast4("Mastercard ending in 4321"));
+        assertEquals("1111", PaymentParser.findLast4("卡號 ****1111"));
+        assertNull(PaymentParser.findLast4("已付款 NT$1234"));
+    }
+
+    @Test
+    public void hongKongCardDollarIsHkd() {
+        String hk = "滙豐信用卡簽賬提示：Mastercard ••4321 於 7-ELEVEN 簽賬 $120.00";
+        PaymentParser.Result tw = PaymentParser.parse(hk);
+        assertEquals(120.0, tw.amount, 0.001);           // 沒提示：當台幣（舊行為）
+        PaymentParser.Result r = PaymentParser.parse(hk, "HKD");
+        assertNull(r.amount);
+        assertEquals("HKD", r.currency);
+        assertEquals(120.0, r.foreign, 0.001);
+        assertEquals(PaymentParser.MASTER, r.card);
+        assertTrue(r.keyword);
+    }
+
+    @Test
+    public void explicitCurrencyBeatsHint() {
+        PaymentParser.Result r = PaymentParser.parse("HK$58.00 at Maxim's", "CNY");
+        assertEquals("HKD", r.currency);
+        r = PaymentParser.parse("已付款 NT$85", "HKD");
+        assertEquals(85.0, r.amount, 0.001);
+        assertNull(r.currency);
+    }
+
+    @Test
+    public void yenIsCnyWithHint() {
+        assertEquals("JPY", PaymentParser.parse("¥550 at LAWSON").currency);
+        PaymentParser.Result r = PaymentParser.parse("微信支付凭证 付款金额 ¥25.00 收款方：瑞幸咖啡", "CNY");
+        assertEquals("CNY", r.currency);
+        assertEquals(25.0, r.foreign, 0.001);
+        assertEquals("瑞幸咖啡", r.merchant);
+    }
+
+    @Test
+    public void alipaySimplified() {
+        PaymentParser.Result r = PaymentParser.parse("你有一笔支出 36.50元 在全家便利店消费", "CNY");
+        assertEquals("CNY", r.currency);
+        assertEquals(36.5, r.foreign, 0.001);
+        assertTrue(r.keyword);
+        assertEquals("全家便利店", r.merchant);
+    }
+
+    @Test
+    public void unionPaySmsRmb() {
+        String sms = "【招商银行】您尾号8899的银联卡11月14日12:30消费人民币128.00元，商户：盒马鲜生";
+        assertTrue(PaymentParser.isCardSpendSms(sms));
+        PaymentParser.Result r = PaymentParser.parse(sms);
+        assertEquals("CNY", r.currency);
+        assertEquals(128.0, r.foreign, 0.001);
+        assertEquals(Card.UNIONPAY, r.card);
+        assertEquals("盒马鲜生", r.merchant);
+    }
+
+    @Test
+    public void alipayPromoIgnored() {
+        assertTrue(PaymentParser.looksLikePromo("恭喜你获得红包，立即领取"));
+    }
 }

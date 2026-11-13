@@ -230,11 +230,13 @@ public class MainActivity extends Activity {
         sum.addView(Ui.text(this, Fmt.money(total == null ? 0 : total), 34, true));
 
         LinearLayout cards = Ui.hbox(this);
-        for (String card : PaymentParser.CARDS) {
+        for (String card : topCards(totals)) {
             Double v = totals.get(card);
             LinearLayout cell = Ui.vbox(this);
             TextView k = Ui.text(this, card, 12, false);
             k.setTextColor(Ui.muted(this));
+            k.setSingleLine(true);
+            k.setEllipsize(TextUtils.TruncateAt.END);
             cell.addView(k);
             cell.addView(Ui.text(this, Fmt.money(v == null ? 0 : v), 15, true));
             cards.addView(cell, Ui.weight(1));
@@ -304,6 +306,18 @@ public class MainActivity extends Activity {
         btn.setOnClickListener(l);
         b.addView(btn, Ui.matchWrap());
         return b;
+    }
+
+    /** 本期花最多的 3 張卡（多張同卡別時分開列）；還沒有紀錄時顯示預設三種。 */
+    static List<String> topCards(Map<String, Double> totals) {
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, Double> e : totals.entrySet()) {
+            if (e.getKey().isEmpty() || e.getValue() == null || e.getValue() <= 0) continue;
+            out.add(e.getKey());
+            if (out.size() == 3) break;
+        }
+        if (out.isEmpty()) java.util.Collections.addAll(out, PaymentParser.CARDS);
+        return out;
     }
 
     /** 主畫面上的出差卡片（出差中，或 3 天內出發）。 */
@@ -639,6 +653,15 @@ public class MainActivity extends Activity {
             }
         });
         box.addView(compare, Ui.topMargin(this, 16));
+
+        Button myCards = Ui.primaryButton(this, "我的卡片 / 付款方式（" + Db.get(this).cards().size() + "）");
+        myCards.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                CardsUi.showList(MainActivity.this, null);
+            }
+        });
+        box.addView(myCards, Ui.topMargin(this, 16));
 
         Button rates = Ui.ghostButton(this, "外幣匯率（出國刷卡自動換算台幣）");
         rates.setOnClickListener(new View.OnClickListener() {
