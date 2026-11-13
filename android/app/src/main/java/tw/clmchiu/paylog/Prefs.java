@@ -173,6 +173,76 @@ final class Prefs {
         sp(c).edit().putBoolean(K_DISCLOSED, true).apply();
     }
 
+    // ───────── 外幣匯率（1 外幣 = ? 台幣），出國刷卡時自動換算 ─────────
+
+    private static final String K_RATE = "rate_";
+
+    /** 預設匯率（約略值，2026/11 臺灣銀行牌告附近），使用者可在設定修改。 */
+    static double defaultRate(String code) {
+        switch (code) {
+            case "JPY": return 0.21;
+            case "USD": return 32.0;
+            case "MYR": return 7.3;
+            case "HKD": return 4.1;
+            case "EUR": return 35.5;
+            case "KRW": return 0.022;
+            case "SGD": return 24.0;
+            case "CNY": return 4.4;
+            case "THB": return 0.95;
+            case "GBP": return 41.0;
+            case "VND": return 0.0012;
+            case "PHP": return 0.55;
+            default: return 0;
+        }
+    }
+
+    static double rate(Context c, String code) {
+        float v = sp(c).getFloat(K_RATE + code, -1f);
+        return v > 0 ? v : defaultRate(code);
+    }
+
+    static void setRate(Context c, String code, double v) {
+        if (v > 0) sp(c).edit().putFloat(K_RATE + code, (float) v).apply();
+        else sp(c).edit().remove(K_RATE + code).apply();
+    }
+
+    // ───────── 略過的通知（診斷用，只存在本機，最多 30 則） ─────────
+
+    private static final String K_SKIPPED = "skipped_notifications";
+    static final int MAX_SKIPPED = 30;
+
+    /** 每則：時間毫秒 \t App 名稱 \t 套件 \t 通知文字（換行改成 ⏎）。新的在前。 */
+    static java.util.List<String[]> skipped(Context c) {
+        java.util.List<String[]> out = new java.util.ArrayList<>();
+        String raw = sp(c).getString(K_SKIPPED, "");
+        if (raw.isEmpty()) return out;
+        for (String line : raw.split("\n")) {
+            String[] f = line.split("\t", 4);
+            if (f.length == 4) out.add(f);
+        }
+        return out;
+    }
+
+    static synchronized void addSkipped(Context c, String label, String pkg, String text) {
+        String t = text.replace('\t', ' ').replace("\r", "").replace("\n", " ⏎ ");
+        if (t.length() > 300) t = t.substring(0, 300);
+        StringBuilder sb = new StringBuilder();
+        sb.append(System.currentTimeMillis()).append('\t').append(label.replace('\t', ' '))
+                .append('\t').append(pkg).append('\t').append(t);
+        int n = 1;
+        for (String[] f : skipped(c)) {
+            if (n >= MAX_SKIPPED) break;
+            if (f[3].equals(t)) continue;   // 同一則通知更新多次只留一則
+            sb.append('\n').append(f[0]).append('\t').append(f[1]).append('\t').append(f[2]).append('\t').append(f[3]);
+            n++;
+        }
+        sp(c).edit().putString(K_SKIPPED, sb.toString()).apply();
+    }
+
+    static void clearSkipped(Context c) {
+        sp(c).edit().remove(K_SKIPPED).apply();
+    }
+
     // ───────── 兩段期間比較：記住上次選的日期（epochDay；-1 = 未設定） ─────────
 
     private static final String K_RANGE = "compare_range_";

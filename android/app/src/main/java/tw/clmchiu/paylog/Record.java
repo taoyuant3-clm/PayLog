@@ -16,6 +16,8 @@ final class Record {
     String sourceLabel = "";// 觸發 App 的顯示名稱，例如 Google 錢包
     boolean pending;        // true = 已偵測付款、尚未填寫
     String dedupKey = "";
+    String currency = "";   // 外幣代碼（出國刷卡）；"" = 台幣
+    double origAmount;      // 外幣原始金額；amount 為換算後台幣
 
     boolean hasLocation() {
         return !Double.isNaN(lat) && !Double.isNaN(lng);

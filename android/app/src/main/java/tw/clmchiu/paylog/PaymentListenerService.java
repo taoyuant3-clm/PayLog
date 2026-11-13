@@ -23,11 +23,6 @@ public class PaymentListenerService extends NotificationListenerService {
 
     private static final String TAG = "PayLog";
 
-    /** 非錢包 App 出現這些字通常是行銷推播，不是實際付款。 */
-    private static final String[] PROMO_WORDS = {
-            "優惠", "折扣", "折價", "活動", "抽獎", "限時", "登錄", "滿額", "加碼", "最高", "專屬", "邀請"
-    };
-
     /** 聊天 / 社群 App 不偵測，避免把對話中的金額誤判成付款。 */
     private static final String[] IGNORED_PACKAGES = {
             "jp.naver.line.android", "com.facebook.orca", "com.facebook.katana", "com.whatsapp",
@@ -114,24 +109,24 @@ public class PaymentListenerService extends NotificationListenerService {
 
         PaymentParser.Result p = PaymentParser.parse(text);
 
+        boolean has = PaymentParser.hasAmount(p);
         boolean isPayment;
         if (wallet) {
-            isPayment = p.amount != null || p.keyword;
+            isPayment = has || p.keyword;
         } else {
-            isPayment = p.amount != null && p.keyword && !looksLikePromo(text);
+            isPayment = has && p.keyword && !PaymentParser.looksLikePromo(text);
         }
-        if (!isPayment) return;
+        if (!isPayment) {
+            // 看起來跟錢有關卻沒被辨識：記下來，設定裡可查看並一鍵補記
+            if (wallet || has || p.keyword) Prefs.addSkipped(this, appLabel(n.extras, pkg), pkg, text);
+            return;
+        }
 
         Detector.onPayment(this, p, pkg, appLabel(n.extras, pkg));
     }
 
     private static boolean isSmsApp(String pkg) {
         for (String p : SMS_PACKAGES) if (p.equals(pkg)) return true;
-        return false;
-    }
-
-    private static boolean looksLikePromo(String text) {
-        for (String w : PROMO_WORDS) if (text.contains(w)) return true;
         return false;
     }
 

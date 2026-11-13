@@ -18,8 +18,8 @@ android {
         applicationId = "tw.clmchiu.paylog"   // 上架前可改成你自己的唯一 ID
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.4.0"
+        versionCode = 7
+        versionName = "1.4.1"
     }
 
     signingConfigs {

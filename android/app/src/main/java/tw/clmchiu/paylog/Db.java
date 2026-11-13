@@ -15,7 +15,7 @@ import java.util.Map;
 final class Db extends SQLiteOpenHelper {
 
     private static final String NAME = "paylog.db";
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
     private static Db instance;
 
     static synchronized Db get(Context c) {
@@ -50,6 +50,13 @@ final class Db extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX idx_records_ts ON records(ts)");
         createPhotos(db);
         createTrips(db);
+        addCurrency(db);
+    }
+
+    /** v4：外幣（出國刷卡時記下原幣與原始金額，amount 為換算後台幣）。 */
+    private static void addCurrency(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE records ADD COLUMN currency TEXT NOT NULL DEFAULT ''");
+        db.execSQL("ALTER TABLE records ADD COLUMN orig_amount REAL NOT NULL DEFAULT 0");
     }
 
     /** v3：出差（一段日期區間，區間內的消費歸入該趟出差）。 */
@@ -75,6 +82,7 @@ final class Db extends SQLiteOpenHelper {
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) createPhotos(db);
         if (oldVersion < 3) createTrips(db);
+        if (oldVersion < 4) addCurrency(db);
     }
 
     // ───────── 出差 ─────────
@@ -212,6 +220,8 @@ final class Db extends SQLiteOpenHelper {
         v.put("source_label", r.sourceLabel);
         v.put("pending", r.pending ? 1 : 0);
         v.put("dedup", r.dedupKey);
+        v.put("currency", r.currency == null ? "" : r.currency);
+        v.put("orig_amount", r.origAmount);
         return v;
     }
 
@@ -233,6 +243,8 @@ final class Db extends SQLiteOpenHelper {
         r.sourceLabel = c.getString(c.getColumnIndexOrThrow("source_label"));
         r.pending = c.getInt(c.getColumnIndexOrThrow("pending")) != 0;
         r.dedupKey = c.getString(c.getColumnIndexOrThrow("dedup"));
+        r.currency = c.getString(c.getColumnIndexOrThrow("currency"));
+        r.origAmount = c.getDouble(c.getColumnIndexOrThrow("orig_amount"));
         return r;
     }
 

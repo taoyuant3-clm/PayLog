@@ -101,4 +101,48 @@ public class PaymentParserTest {
     public void normalSmsIgnored() {
         assertFalse(PaymentParser.isPurchaseOtp("明天下午三點開會，記得帶 2 份文件", true));
     }
+
+    // ───────── 出國刷卡（外幣） ─────────
+
+    @Test
+    public void googleWalletJapanYen() {
+        PaymentParser.Result r = PaymentParser.parse("¥1,200 at LAWSON\nVisa ••1234");
+        assertNull(r.amount);
+        assertEquals("JPY", r.currency);
+        assertEquals(1200.0, r.foreign, 0.001);
+        assertEquals(PaymentParser.VISA, r.card);
+        assertEquals("LAWSON", r.merchant);
+        assertTrue(PaymentParser.hasAmount(r));
+    }
+
+    @Test
+    public void yenSuffixAndChineseName() {
+        assertEquals(3980.0, PaymentParser.parse("VISA卡 消費 3,980円").foreign, 0.001);
+        PaymentParser.Result r = PaymentParser.parse("您的卡片於11/12國外消費日幣1,980元");
+        assertEquals("JPY", r.currency);
+        assertEquals(1980.0, r.foreign, 0.001);
+        assertNull(r.amount);   // 「日幣1,980元」不可當成台幣 1,980
+    }
+
+    @Test
+    public void bankNoticeWithTwdEquivalent() {
+        PaymentParser.Result r = PaymentParser.parse("您的信用卡於日本消費 JPY 3,500，折合新臺幣約735元");
+        assertEquals("JPY", r.currency);
+        assertEquals(3500.0, r.foreign, 0.001);
+        assertEquals(735.0, r.amount, 0.001);
+    }
+
+    @Test
+    public void otherCurrencies() {
+        assertEquals("USD", PaymentParser.parse("US$12.50 at Starbucks").currency);
+        assertEquals("MYR", PaymentParser.parse("RM 25.90 at Grab").currency);
+        assertNull(PaymentParser.parse("Please confirm 123 times").currency);
+    }
+
+    @Test
+    public void cardSpendSms() {
+        assertTrue(PaymentParser.isCardSpendSms("刷卡通知：VISA卡 11/12 消費 3,980円"));
+        assertFalse(PaymentParser.isCardSpendSms("日本限時優惠！刷卡滿 ¥10,000 回饋 5%"));
+        assertFalse(PaymentParser.isCardSpendSms("您的信用卡交易金額NT$1,280，OTP驗證碼：482913"));
+    }
 }

@@ -34,8 +34,12 @@ public class SmsReceiver extends BroadcastReceiver {
     }
 
     static void handle(Context c, String text, String sender) {
-        if (!PaymentParser.isPurchaseOtp(text, Prefs.otpAll(c))) return;
-        PaymentParser.Result p = PaymentParser.parse(text);
-        Detector.onOtp(c, p, sender == null ? "" : sender.trim());
+        String s = sender == null ? "" : sender.trim();
+        if (PaymentParser.isPurchaseOtp(text, Prefs.otpAll(c))) {
+            Detector.onOtp(c, PaymentParser.parse(text), s);
+        } else if (PaymentParser.isCardSpendSms(text)) {
+            // 刷卡消費通知簡訊（例如在日本刷實體卡，只會收到銀行簡訊）
+            Detector.onCardSpendSms(c, PaymentParser.parse(text), s);
+        }
     }
 }

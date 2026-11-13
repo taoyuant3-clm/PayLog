@@ -198,6 +198,14 @@ public class RecordActivity extends Activity {
         amountEt.setHint("0");
         amountEt.setSelectAllOnFocus(true);
         fill.addView(amountEt, Ui.matchWrap());
+        if (!TextUtils.isEmpty(record.currency) && record.origAmount > 0) {
+            // 出國刷卡：顯示原幣金額與換算匯率
+            TextView fx = Ui.text(this, "原幣 " + PaymentParser.foreignLabel(record.currency, record.origAmount)
+                    + "（" + record.currency + "）· 依匯率 " + Fmt.plainNumber(Prefs.rate(this, record.currency))
+                    + " 換算，可直接修改台幣金額；匯率在 設定 → 外幣匯率", 13, false);
+            fx.setTextColor(Ui.muted(this));
+            fill.addView(fx);
+        }
 
         fill.addView(Ui.label(this, "支付卡"));
         cardGroup = new RadioGroup(this);

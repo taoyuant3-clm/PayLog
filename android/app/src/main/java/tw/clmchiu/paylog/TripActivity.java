@@ -209,6 +209,7 @@ public class TripActivity extends Activity {
         line1.setGravity(Gravity.CENTER_VERTICAL);
         TextView when = Ui.text(this, Fmt.format(r.timeMillis, Fmt.SHORT)
                 + (TextUtils.isEmpty(r.card) ? "" : "  ·  " + r.card)
+                + (TextUtils.isEmpty(r.currency) ? "" : "  ·  " + PaymentParser.foreignLabel(r.currency, r.origAmount))
                 + (photos > 0 ? "  ·  📎" + photos : ""), 13, false);
         when.setTextColor(Ui.muted(this));
         line1.addView(when, Ui.weight(1));

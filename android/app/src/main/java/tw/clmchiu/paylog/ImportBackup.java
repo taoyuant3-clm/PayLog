@@ -26,7 +26,7 @@ import java.util.zip.ZipInputStream;
 /**
  * 匯入備份：讀取本 App 匯出的 CSV 或 ZIP（表格 + 發票照片），還原消費紀錄與照片。
  * 以新增方式寫入，不會刪除現有資料；重複匯入同一份會產生重複紀錄。
- * 依欄位位置讀取前 13 欄；之後版本新增的欄位（例如「出差」）會略過。
+ * 依欄位位置讀取；舊版（13 欄）與 1.4.0（含出差、原幣欄）都能匯入。
  */
 final class ImportBackup {
 
@@ -132,6 +132,12 @@ final class ImportBackup {
             String src = get(row, 10);
             rec.sourceLabel = "手動".equals(src) ? "" : src;
             rec.pending = "待填寫".equals(get(row, 11));
+            // 1.4.0 起：第 14 欄出差（略過）、第 15–16 欄原幣、原幣金額
+            String cur = get(row, 14);
+            if (cur.matches("[A-Z]{3}")) {
+                rec.currency = cur;
+                rec.origAmount = parseNum(get(row, 15));
+            }
 
             long id = db.insert(rec);
             r.records++;

@@ -407,7 +407,8 @@ public class MainActivity extends Activity {
             String card = TextUtils.isEmpty(r.card) ? "" : "  ·  " + r.card;
             String pics = photoCount > 0 ? "  ·  📎" + photoCount : "";
             String tripTag = trip == null ? "" : "  ·  ✈ " + trip.displayName();
-            when.setText(Fmt.format(r.timeMillis, Fmt.SHORT) + card + pics + tripTag);
+            String fx = TextUtils.isEmpty(r.currency) ? "" : "  ·  " + PaymentParser.foreignLabel(r.currency, r.origAmount);
+            when.setText(Fmt.format(r.timeMillis, Fmt.SHORT) + card + fx + pics + tripTag);
             when.setTextColor(trip == null ? Ui.muted(c) : Ui.tripAccent(c));
             amount.setText(r.amount > 0 ? Fmt.money(r.amount) : "NT$ —");
             if (r.pending) {
@@ -639,6 +640,25 @@ public class MainActivity extends Activity {
         });
         box.addView(compare, Ui.topMargin(this, 16));
 
+        Button rates = Ui.ghostButton(this, "外幣匯率（出國刷卡自動換算台幣）");
+        rates.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showRates();
+            }
+        });
+        box.addView(rates, Ui.topMargin(this, 10));
+
+        int sk = Prefs.skipped(this).size();
+        Button skipped = Ui.ghostButton(this, "未辨識的付款通知（" + sk + "）");
+        skipped.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showSkipped();
+            }
+        });
+        box.addView(skipped, Ui.topMargin(this, 10));
+
         Button imp = Ui.ghostButton(this, "匯入備份（還原紀錄 / 照片）");
         imp.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -762,6 +782,134 @@ public class MainActivity extends Activity {
                         manageCategories();
                     }
                 })
+                .show();
+    }
+
+    /** 外幣匯率：點一下修改。 */
+    private void showRates() {
+        final String[][] F = PaymentParser.FOREIGN;
+        String[] items = new String[F.length];
+        for (int i = 0; i < F.length; i++) {
+            String code = F[i][0];
+            boolean custom = Prefs.rate(this, code) != Prefs.defaultRate(code);
+            items[i] = PaymentParser.FOREIGN_SYMBOL[i] + "  " + code + "　1 = NT$" + Fmt.plainNumber(Prefs.rate(this, code))
+                    + (custom ? "（自訂）" : "");
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("外幣匯率（點一下修改）")
+                .setItems(items, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        editRate(F[which][0]);
+                    }
+                })
+                .setNegativeButton("完成", null)
+                .show();
+    }
+
+    private void editRate(final String code) {
+        final EditText et = new EditText(this);
+        et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        et.setText(Fmt.plainNumber(Prefs.rate(this, code)));
+        et.setSelectAllOnFocus(true);
+        LinearLayout box = Ui.vbox(this);
+        int p = Ui.dp(this, 20);
+        box.setPadding(p, Ui.dp(this, 8), p, 0);
+        TextView h = Ui.text(this, "1 " + code + " = ? 台幣（預設 " + Fmt.plainNumber(Prefs.defaultRate(code))
+                + "）。信用卡實際入帳金額以帳單為準，可在每筆紀錄直接改。", 13, false);
+        h.setTextColor(Ui.muted(this));
+        box.addView(h);
+        box.addView(et, Ui.matchWrap());
+        new AlertDialog.Builder(this)
+                .setTitle(code + " 匯率")
+                .setView(box)
+                .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        showRates();
+                    }
+                })
+                .setNeutralButton("恢復預設", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        Prefs.setRate(MainActivity.this, code, 0);
+                        showRates();
+                    }
+                })
+                .setPositiveButton("儲存", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        try {
+                            double v = Double.parseDouble(et.getText().toString().trim());
+                            if (v > 0) Prefs.setRate(MainActivity.this, code, v);
+                        } catch (NumberFormatException ignored) {
+                        }
+                        showRates();
+                    }
+                })
+                .show();
+    }
+
+    /**
+     * 錢包 / 銀行 App 發出、看起來跟付款有關卻沒被辨識的通知。
+     * 點一下用該則通知補記一筆；也方便把格式回報給開發者修正。
+     */
+    private void showSkipped() {
+        final List<String[]> list = Prefs.skipped(this);
+        if (list.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("未辨識的付款通知")
+                    .setMessage("目前沒有。\n\n如果刷卡後沒有跳出記帳，錢包或銀行 App 的通知會記在這裡（只存在本機，最多 "
+                            + Prefs.MAX_SKIPPED + " 則），點一下就能補記。")
+                    .setPositiveButton("知道了", null)
+                    .show();
+            return;
+        }
+        String[] items = new String[list.size()];
+        for (int i = 0; i < list.size(); i++) {
+            String[] f = list.get(i);
+            long ts = 0;
+            try {
+                ts = Long.parseLong(f[0]);
+            } catch (NumberFormatException ignored) {
+            }
+            items[i] = Fmt.format(ts, Fmt.SHORT) + "  " + f[1] + "\n" + f[3];
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("未辨識的付款通知（點一下補記）")
+                .setItems(items, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        String[] f = list.get(which);
+                        PaymentParser.Result p = PaymentParser.parse(f[3].replace(" ⏎ ", "\n"));
+                        Record r = new Record();
+                        try {
+                            r.timeMillis = Long.parseLong(f[0]);
+                        } catch (NumberFormatException e) {
+                            r.timeMillis = System.currentTimeMillis();
+                        }
+                        r.amount = Detector.ntAmount(MainActivity.this, p);
+                        if (p.foreign != null) {
+                            r.currency = p.currency;
+                            r.origAmount = p.foreign;
+                        }
+                        r.card = p.card == null ? "" : p.card;
+                        r.merchant = p.merchant == null ? "" : p.merchant;
+                        r.source = f[2];
+                        r.sourceLabel = f[1];
+                        r.pending = true;
+                        r.dedupKey = "manual|" + r.timeMillis;
+                        Db.get(MainActivity.this).insert(r);
+                        openRecord(r.id);
+                    }
+                })
+                .setNeutralButton("清除", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        Prefs.clearSkipped(MainActivity.this);
+                    }
+                })
+                .setNegativeButton("關閉", null)
                 .show();
     }
 
@@ -921,7 +1069,7 @@ public class MainActivity extends Activity {
         /** @param trips 出差清單，用來填「出差」欄（出差期間的紀錄填出差名稱）；可為 null */
         static String build(List<Record> rows, Map<Long, String> photoNames, List<Trip> trips) {
             StringBuilder sb = new StringBuilder("\uFEFF");
-            sb.append("日期,時間,消費總值,支付卡,用途,備註,商家,地點,緯度,經度,來源,狀態,照片,出差\r\n");
+            sb.append("日期,時間,消費總值,支付卡,用途,備註,商家,地點,緯度,經度,來源,狀態,照片,出差,原幣,原幣金額\r\n");
             for (Record r : rows) {
                 sb.append(Fmt.format(r.timeMillis, Fmt.DATE)).append(',')
                         .append(Fmt.format(r.timeMillis, Fmt.TIME)).append(',')
@@ -936,7 +1084,9 @@ public class MainActivity extends Activity {
                         .append(esc(TextUtils.isEmpty(r.sourceLabel) ? "手動" : r.sourceLabel)).append(',')
                         .append(r.pending ? "待填寫" : "已填寫").append(',')
                         .append(esc(photoNames == null || photoNames.get(r.id) == null ? "" : photoNames.get(r.id))).append(',')
-                        .append(esc(trips == null || tripOf(trips, r.timeMillis) == null ? "" : tripOf(trips, r.timeMillis).displayName()))
+                        .append(esc(trips == null || tripOf(trips, r.timeMillis) == null ? "" : tripOf(trips, r.timeMillis).displayName())).append(',')
+                        .append(esc(r.currency)).append(',')
+                        .append(TextUtils.isEmpty(r.currency) ? "" : Fmt.plainNumber(r.origAmount))
                         .append("\r\n");
             }
             return sb.toString();

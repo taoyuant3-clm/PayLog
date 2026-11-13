@@ -20,6 +20,79 @@ final class PaymentParser {
         String card;        // null = 無法判斷
         String merchant;    // null = 無法判斷
         boolean keyword;    // 通知內含付款關鍵字
+        String currency;    // 外幣代碼（JPY、USD…）；null = 台幣
+        Double foreign;     // 外幣金額；amount 為 null 時需依匯率換算成台幣
+    }
+
+    // ───────── 外幣（出國刷卡：¥1,200、JPY 1,200、1,200円、日幣1,200元…） ─────────
+
+    /** 代碼 → 通知中可能出現的寫法（regex）。順序重要：US$、HK$、S$ 要在單獨的 $ 之前處理。 */
+    static final String[][] FOREIGN = {
+            {"JPY", "JPY|JP¥|[¥￥]|日[圓圆幣币元]|円", "円|日[圓圆幣币元]|JPY"},
+            {"USD", "USD|US\\s?\\$|美[金元]", "USD|美[金元]"},
+            {"MYR", "MYR|(?-i:\\bRM)|馬幣|令吉", "MYR|令吉|馬幣"},
+            {"HKD", "HKD|HK\\s?\\$|港[幣币元]", "HKD|港[幣币元]"},
+            {"EUR", "EUR|€|歐元", "EUR|歐元"},
+            {"KRW", "KRW|₩|韓[圓圆幣币元]", "KRW|韓[圓圆幣币元]"},
+            {"SGD", "SGD|S\\$|新加坡幣|星幣", "SGD|新加坡幣"},
+            {"CNY", "CNY|RMB|人民幣", "CNY|RMB|人民幣"},
+            {"THB", "THB|泰銖|฿", "THB|泰銖"},
+            {"GBP", "GBP|£|英鎊", "GBP|英鎊"},
+            {"VND", "VND|越南盾|₫", "VND|越南盾"},
+            {"PHP", "PHP|菲律賓披索|₱", "PHP"},
+    };
+    static final String[] FOREIGN_SYMBOL = {
+            "¥", "US$", "RM", "HK$", "€", "₩", "S$", "CN¥", "฿", "£", "₫", "₱"};
+
+    private static final Pattern[][] FOREIGN_PATTERNS = new Pattern[FOREIGN.length][2];
+    static {
+        for (int i = 0; i < FOREIGN.length; i++) {
+            FOREIGN_PATTERNS[i][0] = Pattern.compile("(?:" + FOREIGN[i][1] + ")\\s*[:：]?\\s*" + "([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\\.([0-9]{1,2}))?",
+                    Pattern.CASE_INSENSITIVE);
+            FOREIGN_PATTERNS[i][1] = Pattern.compile("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\\.([0-9]{1,2}))?\\s*(?:" + FOREIGN[i][2] + ")",
+                    Pattern.CASE_INSENSITIVE);
+        }
+    }
+
+    /** 顯示用：JPY 1,200 → ¥1,200 */
+    static String foreignLabel(String code, double v) {
+        for (int i = 0; i < FOREIGN.length; i++) {
+            if (FOREIGN[i][0].equals(code)) {
+                java.text.DecimalFormat f = new java.text.DecimalFormat(v == Math.rint(v) ? "#,##0" : "#,##0.##");
+                return FOREIGN_SYMBOL[i] + f.format(v);
+            }
+        }
+        return code + " " + v;
+    }
+
+    /**
+     * 找外幣金額；找到時回傳 {代碼, 金額, 起, 迄}，否則 null。
+     * 取文字中最先出現的外幣金額。
+     */
+    static Object[] findForeign(String t) {
+        Object[] best = null;
+        for (int i = 0; i < FOREIGN.length; i++) {
+            for (Pattern p : FOREIGN_PATTERNS[i]) {
+                Matcher m = p.matcher(t);
+                while (m.find()) {
+                    Double v = toNumber(m);
+                    if (v == null) continue;
+                    if (isFourDigitsAfterCardWord(t, m.start())) continue;
+                    if (best == null || m.start() < (Integer) best[2]) {
+                        best = new Object[]{FOREIGN[i][0], v, m.start(), m.end()};
+                    }
+                    break;
+                }
+            }
+        }
+        return best;
+    }
+
+    /** 「末四碼1234」不是金額。 */
+    private static boolean isFourDigitsAfterCardWord(String t, int start) {
+        int from = Math.max(0, start - 4);
+        String before = t.substring(from, start);
+        return before.contains("末四碼") || before.contains("卡號") || before.endsWith("••");
     }
 
     private static final String NUM = "([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\\.([0-9]{1,2}))?";
@@ -46,7 +119,9 @@ final class PaymentParser {
 
     private static final String[] KEYWORDS = {
             "付款", "支付", "消費", "交易", "刷卡", "扣款", "感應", "嗶",
-            "payment", "paid", "purchase", "transaction", "spent", "charged"
+            "国外", "國外", "海外",
+            "支払", "ご利用", "決済", "購入", "利用金額",
+            "payment", "paid", "purchase", "transaction", "spent", "charged", "approved"
     };
 
     private static final Pattern MERCHANT_STOP = Pattern.compile(
@@ -101,7 +176,19 @@ final class PaymentParser {
         if (text == null) return r;
         String t = text.replace(' ', ' ');
 
-        r.amount = findAmount(t);
+        // 先找外幣，避免「日幣1,200元」「US$12」被當成台幣
+        Object[] f = findForeign(t);
+        String rest = t;
+        if (f != null) {
+            r.currency = (String) f[0];
+            r.foreign = (Double) f[1];
+            int a = (Integer) f[2], b = (Integer) f[3];
+            StringBuilder sb = new StringBuilder(t);
+            for (int i = a; i < b; i++) sb.setCharAt(i, ' ');
+            rest = sb.toString();
+        }
+        // 銀行通知常同時附上折合台幣金額，有就直接用
+        r.amount = findAmount(rest);
         r.card = detectCard(t);
         r.merchant = findMerchant(t);
 
@@ -113,6 +200,32 @@ final class PaymentParser {
             }
         }
         return r;
+    }
+
+    /** 有金額（台幣或外幣）。 */
+    static boolean hasAmount(Result r) {
+        return r.amount != null || r.foreign != null;
+    }
+
+    private static final String[] PROMO_WORDS = {
+            "優惠", "折扣", "折價", "活動", "抽獎", "限時", "登錄", "滿額", "加碼", "最高", "專屬", "邀請", "回饋"
+    };
+
+    /** 行銷推播常見字，不是實際付款。 */
+    static boolean looksLikePromo(String text) {
+        for (String w : PROMO_WORDS) if (text.contains(w)) return true;
+        return false;
+    }
+
+    private static final Pattern CARD_SPEND = Pattern.compile(
+            "卡|card|visa|master|jcb|刷卡|消費|簽帳|授權", Pattern.CASE_INSENSITIVE);
+
+    /** 銀行「刷卡消費通知」簡訊（不是驗證碼）：有金額、有付款字樣、提到卡片、不是廣告。 */
+    static boolean isCardSpendSms(String text) {
+        if (text == null || text.isEmpty()) return false;
+        if (OTP_WORD.matcher(text).find()) return false;
+        Result r = parse(text);
+        return hasAmount(r) && r.keyword && CARD_SPEND.matcher(text).find() && !looksLikePromo(text);
     }
 
     static Double findAmount(String t) {
