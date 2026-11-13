@@ -213,4 +213,48 @@ public class PaymentParserTest {
     public void alipayPromoIgnored() {
         assertTrue(PaymentParser.looksLikePromo("恭喜你获得红包，立即领取"));
     }
+
+    // ───────── 誤判（2026-11-13 回報：Google 新聞、幣安價格、Samsung Wallet 悠遊卡） ─────────
+
+    private static boolean app(String t) {
+        return PaymentParser.acceptNotification(t, PaymentParser.parse(t), false);
+    }
+
+    private static boolean wallet(String t) {
+        return PaymentParser.acceptNotification(t, PaymentParser.parse(t), true);
+    }
+
+    @Test
+    public void newsWithPriceIsNotPayment() {
+        assertFalse(app("港股收市：騰訊旗下股份收報 HK$12.23，成交額增加，消費股走強"));
+        assertFalse(app("Google 快訊：日本旅遊消費創新高，平均每人 NT$50,000"));
+    }
+
+    @Test
+    public void cryptoPriceAlertIsNotPayment() {
+        assertFalse(app("BTC/USDT 突破 US$68,000，24 小時交易量上升"));
+        assertFalse(app("價格提醒：比特幣已達 $68,000"));
+        assertFalse(app("您的限價單已成交：買入 0.01 BTC，成交金額 US$680"));
+    }
+
+    @Test
+    public void easyCardBalanceOrTopUpIsNotPayment() {
+        assertFalse(wallet("悠遊卡\n餘額 NT$2,000"));
+        assertFalse(wallet("悠遊卡 自動加值 NT$2,000 成功"));
+        assertFalse(wallet("已將悠遊卡新增至 Samsung Wallet"));
+        // 真的扣款：取扣款金額，不取餘額
+        assertTrue(wallet("悠遊卡 扣款 NT$35，餘額 NT$2,000"));
+        assertEquals(35.0, PaymentParser.parse("悠遊卡 扣款 NT$35，餘額 NT$2,000").amount, 0.001);
+    }
+
+    @Test
+    public void realPaymentsStillAccepted() {
+        assertTrue(wallet("NT$120.00 at 7-ELEVEN\nVisa ••1234"));
+        assertTrue(wallet("¥1,200 at LAWSON\nVisa ••1234"));
+        assertTrue(app("信用卡消費通知\n您的VISA卡末四碼1234於10/14 12:30於星巴克消費新臺幣1,250元"));
+        assertTrue(app("滙豐信用卡簽賬提示：Mastercard ••4321 於 7-ELEVEN 簽賬 HK$120.00"));
+        assertTrue(app("街口支付 付款成功 NT$85"));
+        assertTrue(wallet("You paid US$12.50 at Starbucks with payment method Visa ••1234"));
+        assertTrue(app("您的信用卡於日本消費 JPY 3,500，折合新臺幣約735元"));
+    }
 }

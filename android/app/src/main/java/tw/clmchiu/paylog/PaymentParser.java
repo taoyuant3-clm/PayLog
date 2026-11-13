@@ -198,7 +198,7 @@ final class PaymentParser {
         Result r = new Result();
         if (text == null) return r;
         if ("TWD".equals(hint)) hint = null;
-        String t = text.replace(' ', ' ');
+        String t = stripBalance(text.replace('\u00A0', ' '));
 
         // 先找外幣，避免「日幣1,200元」「US$12」被當成台幣
         Object[] f = findForeign(t, hint);
@@ -237,6 +237,103 @@ final class PaymentParser {
         return r;
     }
 
+    // ───────── 判斷「真的是一筆付款」：避免新聞、幣價、餘額、加值通知被當成消費 ─────────
+
+    private static final Pattern BALANCE = Pattern.compile(
+            "(?:餘額|余额|結餘|结余|可用額度|可用额度|剩餘|剩余|balance|available)\\s*(?:為|为|是)?\\s*[:：]?\\s*"
+                    + "(?:NT\\s?\\$|HK\\s?\\$|US\\s?\\$|[A-Z]{3}|新[臺台]幣|人民[幣币]|港[幣币])?\\s*[$＄¥￥]?\\s*"
+                    + "[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s*(?:元|円)?",
+            Pattern.CASE_INSENSITIVE);
+
+    /** 去掉「餘額 NT$2,000」這類金額（不是這筆的消費金額）。 */
+    static String stripBalance(String t) {
+        Matcher m = BALANCE.matcher(t);
+        StringBuilder sb = new StringBuilder(t);
+        while (m.find()) {
+            for (int i = m.start(); i < m.end(); i++) sb.setCharAt(i, ' ');
+        }
+        return sb.toString();
+    }
+
+    private static final Pattern STRONG_PAY = Pattern.compile(
+            "付款成功|支付成功|交易成功|扣款成功|付款完成|支付完成|已付款|已支付|已扣款|"
+                    + "消費通知|消费通知|刷卡通知|交易通知|消費提醒|消费提醒|交易提醒|簽帳|簽賬|签账|"
+                    + "刷卡消費|刷卡消费|消費金額|消费金额|交易金額|交易金额|付款金[額额]|支付金[額额]|授權成功|授权成功|"
+                    + "國外消費|国外消费|海外消費|海外消费|支出|"
+                    + "您的\\S{0,12}卡|您尾[號号]|卡[號号]末|末四[碼码]|尾[號号]\\s*[0-9]{4}|[•·*＊]{2,}\\s*[0-9]{4}|"
+                    + "you paid|you spent|payment of|purchase of|was charged|been charged|card ending|transaction at|\\bpaid\\b.{0,40}\\bat\\b",
+            Pattern.CASE_INSENSITIVE);
+
+    /** 明確的付款字樣（「付款成功」「刷卡通知」「您的信用卡」「••1234」…）。單獨的「交易」「消費」不算，新聞常出現。 */
+    static boolean strongPayment(String text) {
+        return text != null && STRONG_PAY.matcher(text).find();
+    }
+
+    private static final String[] MARKET_WORDS = {
+            "漲", "涨", "跌", "突破", "價格", "价格", "行情", "報價", "报价", "股價", "股价", "幣價", "币价",
+            "指數", "指数", "市值", "現價", "现价", "收盤", "收盘", "開盤", "开盘", "目標價", "到價", "到价",
+            "比特幣", "比特币", "以太幣", "以太币", "加密貨幣", "加密货币",
+            "price alert", "bitcoin", "crypto", "stock price"
+    };
+    private static final Pattern PERCENT = Pattern.compile("[0-9]+(?:\\.[0-9]+)?\\s*%");
+    private static final Pattern TICKER = Pattern.compile("\\b(?:BTC|ETH|USDT|BNB|SOL|XRP|DOGE)\\b", Pattern.CASE_INSENSITIVE);
+
+    /** 股價、幣價、匯率等行情提醒。 */
+    static boolean looksLikeMarket(String text) {
+        if (text == null) return false;
+        String lower = text.toLowerCase(Locale.ROOT);
+        for (String w : MARKET_WORDS) if (lower.contains(w)) return true;
+        return TICKER.matcher(text).find() || PERCENT.matcher(text).find();
+    }
+
+    private static final String[] NON_SPEND_WORDS = {
+            "加值", "儲值", "储值", "充值", "退款", "退貨", "退货", "退刷", "取消交易", "交易取消", "交易失敗", "交易失败",
+            "付款失敗", "付款失败", "收款", "入帳", "入账", "轉入", "转入", "收益", "回饋金", "現金回饋",
+            "已新增", "已加入", "新增卡片", "卡片已", "已啟用", "已启用", "已設定", "即將到期", "已到期", "餘額不足", "余额不足",
+            "餘額", "余额",
+            "refund", "top up", "top-up", "topped up", "reload", "declined", "received", "added to"
+    };
+
+    /** 加值、退款、收款、餘額通知、卡片設定、交易失敗等，不是消費。 */
+    /** 「扣款 NT$35，餘額 NT$500」是消費（有扣款字樣）；只有餘額 / 加值才排除。 */
+    static boolean looksLikeNonSpendOnly(String text) {
+        if (!looksLikeNonSpend(text)) return false;
+        String lower = text.toLowerCase(Locale.ROOT);
+        String[] spend = {"扣款", "消費", "消费", "付款", "支付", "支出", "簽賬", "签账", "簽帳", "刷卡", "paid", "spent", "purchase"};
+        for (String w : spend) if (lower.contains(w)) return looksLikeHardNonSpend(lower);
+        return true;
+    }
+
+    private static final String[] HARD_NON_SPEND = {
+            "加值", "儲值", "储值", "充值", "退款", "退貨", "退货", "退刷", "取消", "失敗", "失败", "收款", "入帳", "入账",
+            "轉入", "转入", "收益", "回饋金", "已新增", "已加入", "新增卡片", "已啟用", "已启用", "已設定", "到期", "不足",
+            "refund", "top up", "top-up", "reload", "declined", "received", "added to"
+    };
+
+    private static boolean looksLikeHardNonSpend(String lower) {
+        for (String w : HARD_NON_SPEND) if (lower.contains(w)) return true;
+        return false;
+    }
+
+    static boolean looksLikeNonSpend(String text) {
+        if (text == null) return false;
+        String lower = text.toLowerCase(Locale.ROOT);
+        for (String w : NON_SPEND_WORDS) if (lower.contains(w)) return true;
+        return false;
+    }
+
+    /**
+     * 這則 App 通知是否算一筆付款。
+     * 錢包：有這筆的金額（餘額不算）或明確付款字樣；加值、餘額、新增卡片、退款不算。
+     * 其他 App：金額 + 明確付款字樣，且不是廣告、行情、加值 / 退款。
+     */
+    static boolean acceptNotification(String text, Result p, boolean wallet) {
+        boolean has = hasAmount(p);
+        boolean strong = strongPayment(text);
+        if (wallet) return (has || strong) && !looksLikeNonSpendOnly(text);
+        return has && strong && !looksLikePromo(text) && !looksLikeMarket(text) && !looksLikeNonSpendOnly(text);
+    }
+
     /** 有金額（台幣或外幣）。 */
     static boolean hasAmount(Result r) {
         return r.amount != null || r.foreign != null;
@@ -261,7 +358,8 @@ final class PaymentParser {
         if (text == null || text.isEmpty()) return false;
         if (OTP_WORD.matcher(text).find()) return false;
         Result r = parse(text);
-        return hasAmount(r) && r.keyword && CARD_SPEND.matcher(text).find() && !looksLikePromo(text);
+        return hasAmount(r) && strongPayment(text) && CARD_SPEND.matcher(text).find()
+                && !looksLikePromo(text) && !looksLikeMarket(text) && !looksLikeNonSpendOnly(text);
     }
 
     private static final Pattern EXPLICIT_TWD = Pattern.compile(

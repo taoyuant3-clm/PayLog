@@ -383,6 +383,26 @@ public class RecordActivity extends Activity {
             col.addView(del, Ui.topMargin(this, 10));
         }
 
+        // 自動偵測到、但其實不是付款（新聞、幣價、餘額通知…）：刪除，並可不再偵測該 App
+        final String src = record.source;
+        if (!isNew && record.pending && !TextUtils.isEmpty(src)
+                && !src.startsWith(Detector.SMS_SOURCE_PREFIX) && !Prefs.isWallet(src)) {
+            final String app = TextUtils.isEmpty(record.sourceLabel) ? src : record.sourceLabel;
+            Button notPay = Ui.ghostButton(this, "這不是付款：刪除，並不再偵測「" + app + "」");
+            notPay.setTextColor(Ui.warn(this));
+            notPay.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Prefs.block(RecordActivity.this, src);
+                    Db.get(RecordActivity.this).delete(record.id);
+                    Notifier.cancel(RecordActivity.this, record.id);
+                    Toast.makeText(RecordActivity.this, "已刪除；之後不再偵測「" + app + "」（設定可重設）", Toast.LENGTH_LONG).show();
+                    finish();
+                }
+            });
+            col.addView(notPay, Ui.topMargin(this, 10));
+        }
+
         Ui.applyInsets(this, scroll);
         return scroll;
     }

@@ -27,7 +27,14 @@ public class PaymentListenerService extends NotificationListenerService {
     private static final String[] IGNORED_PACKAGES = {
             "jp.naver.line.android", "com.facebook.orca", "com.facebook.katana", "com.whatsapp",
             "org.telegram.messenger", "com.instagram.android", "com.discord",
-            "com.google.android.gm", "com.google.android.youtube"
+            "com.google.android.gm", "com.google.android.youtube",
+            // 新聞、搜尋、瀏覽器：常推播含金額的新聞
+            "com.google.android.googlequicksearchbox", "com.google.android.apps.magazines", "com.android.chrome",
+            "com.sec.android.app.sbrowser", "com.yahoo.mobile.client.android.yahoo", "com.yahoo.mobile.client.android.finance",
+            "com.google.android.apps.maps", "com.google.android.calendar", "com.google.android.keep",
+            // 加密貨幣交易所、券商：價格提醒不是消費
+            "com.binance.dev", "com.okinc.okex.gp", "com.bybit.app", "com.coinbase.android", "com.kraken.trade",
+            "com.max.exchange", "com.bitopro.app", "com.robinhood.android", "com.futu.futubull", "com.moomoo.trade"
     };
 
     /** 簡訊 App：只用來辨識網購驗證碼簡訊（未授予簡訊權限時的備援）。 */
@@ -117,12 +124,9 @@ public class PaymentListenerService extends NotificationListenerService {
         PaymentParser.Result p = Card.analyze(this, text, pkg, System.currentTimeMillis());
 
         boolean has = PaymentParser.hasAmount(p);
-        boolean isPayment;
-        if (wallet) {
-            isPayment = has || p.keyword;
-        } else {
-            isPayment = has && p.keyword && !PaymentParser.looksLikePromo(text);
-        }
+        boolean isPayment = PaymentParser.acceptNotification(text, p, wallet);
+        // 非錢包 App 金額大得不合理（> NT$200,000）多半是行情或帳戶通知
+        if (isPayment && !wallet && Detector.ntAmount(this, p) > 200000) isPayment = false;
         if (!isPayment) {
             // 看起來跟錢有關卻沒被辨識：記下來，設定裡可查看並一鍵補記
             if (wallet || has || p.keyword) Prefs.addSkipped(this, appLabel(n.extras, pkg), pkg, text);
@@ -150,7 +154,8 @@ public class PaymentListenerService extends NotificationListenerService {
                     || title.contains("支付通知") || title.contains("扣费") || title.contains("扣費");
             if (!payTitle) return;
         }
-        if (PaymentParser.looksLikePromo(text)) return;
+        if (PaymentParser.looksLikePromo(text) || PaymentParser.looksLikeMarket(text)) return;
+        if (PaymentParser.looksLikeNonSpendOnly(text)) return;
         String lower = text.toLowerCase(Locale.ROOT);
         boolean payWord = false;
         for (String w : SUPER_APP_PAY) {
