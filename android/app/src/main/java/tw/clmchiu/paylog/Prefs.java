@@ -198,7 +198,14 @@ final class Prefs {
 
     static double rate(Context c, String code) {
         float v = sp(c).getFloat(K_RATE + code, -1f);
-        return v > 0 ? v : defaultRate(code);
+        return v > 0 && plausibleRate(code, v) ? v : defaultRate(code);
+    }
+
+    /** 匯率是否合理（預設值的 1/3 ～ 3 倍內）。擋掉牌告格式改變、抓錯欄位造成的離譜匯率。 */
+    static boolean plausibleRate(String code, double v) {
+        double d = defaultRate(code);
+        if (d <= 0) return v > 0;
+        return v >= d / 3 && v <= d * 3;
     }
 
     static void setRate(Context c, String code, double v) {

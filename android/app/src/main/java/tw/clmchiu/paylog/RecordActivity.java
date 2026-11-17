@@ -200,11 +200,27 @@ public class RecordActivity extends Activity {
         fill.addView(amountEt, Ui.matchWrap());
         if (!TextUtils.isEmpty(record.currency) && record.origAmount > 0) {
             // 出國刷卡：顯示原幣金額與換算匯率
-            TextView fx = Ui.text(this, "原幣 " + PaymentParser.foreignLabel(record.currency, record.origAmount)
+            final TextView fx = Ui.text(this, "原幣 " + PaymentParser.foreignLabel(record.currency, record.origAmount)
                     + "（" + record.currency + "）· 依匯率 " + Fmt.plainNumber(Prefs.rate(this, record.currency))
                     + " 換算，可直接修改台幣金額；匯率在 設定 → 外幣匯率", 13, false);
             fx.setTextColor(Ui.muted(this));
             fill.addView(fx);
+            // 幣別判斷錯了（例如在台灣刷香港卡，金額其實是台幣）：一鍵改回
+            final TextView notFx = Ui.text(this, "不是外幣？金額其實是 NT$" + Fmt.plainNumber(record.origAmount) + " → 點此改正", 13, true);
+            notFx.setTextColor(Ui.brand(this));
+            notFx.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 4));
+            notFx.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    amountEt.setText(Fmt.plainNumber(record.origAmount));
+                    record.currency = "";
+                    record.origAmount = 0;
+                    fx.setVisibility(View.GONE);
+                    notFx.setVisibility(View.GONE);
+                    Toast.makeText(RecordActivity.this, "已改為台幣，按儲存生效", Toast.LENGTH_SHORT).show();
+                }
+            });
+            fill.addView(notFx);
         }
 
         LinearLayout cardHead = Ui.hbox(this);

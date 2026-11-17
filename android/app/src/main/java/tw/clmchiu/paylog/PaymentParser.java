@@ -34,7 +34,7 @@ final class PaymentParser {
             {"HKD", "HKD|HK\\s?\\$|港[幣币元紙纸]", "HKD|港[幣币元]"},
             {"EUR", "EUR|€|歐元", "EUR|歐元"},
             {"KRW", "KRW|₩|韓[圓圆幣币元]", "KRW|韓[圓圆幣币元]"},
-            {"SGD", "SGD|S\\$|新加坡幣|星幣", "SGD|新加坡幣"},
+            {"SGD", "SGD|(?<![A-Za-z])S\\$|新加坡幣|星幣", "SGD|新加坡幣"},
             {"CNY", "CNY|RMB|CN[¥￥]|人民[幣币]", "CNY|RMB|人民[幣币]"},
             {"THB", "THB|泰銖|฿", "THB|泰銖"},
             {"GBP", "GBP|£|英鎊", "GBP|英鎊"},

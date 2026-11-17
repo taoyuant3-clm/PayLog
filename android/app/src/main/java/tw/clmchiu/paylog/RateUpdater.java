@@ -140,7 +140,7 @@ public class RateUpdater extends BroadcastReceiver {
         int n = 0;
         for (String[] f : PaymentParser.FOREIGN) {
             Double v = rates.get(f[0]);
-            if (v != null && v > 0) {
+            if (v != null && v > 0 && Prefs.plausibleRate(f[0], v)) {
                 Prefs.setRate(c, f[0], v);
                 n++;
             }

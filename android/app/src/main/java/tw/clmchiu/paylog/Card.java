@@ -93,7 +93,8 @@ final class Card {
 
     /**
      * 解析通知 / 簡訊：
-     * 1. 末四碼對到「我的卡片」→ 用該卡名稱與結算幣別
+     * 1. 末四碼對到「我的卡片」→ 用該卡名稱（結算幣別只用在發卡銀行自己的 App / 簡訊）
+     * 1b. Google 錢包 / Samsung Wallet：通知是店家當地貨幣 → 看人在哪裡，不看卡片（見 Region.pickHint）
      * 2. 微信 / 支付寶 / 八達通 / PayMe 的通知 → 該付款方式（大陸版預設人民幣、香港版預設港幣）
      * 3. 卡別只有一張符合 → 用那張卡
      * 4. 都沒有 → 出差設定的幣別（例如香港出差 = 港幣）
@@ -134,13 +135,11 @@ final class Card {
             if (n == 1) card = only;
         }
 
-        String hint = null;
-        if (card != null) hint = card.foreignCurrency();
-        if (hint == null && (card == null || TextUtils.isEmpty(card.currency))) hint = currencyForPackage(pkg);
-        if (hint == null && card == null) {
-            Trip t = Db.get(c).tripAt(when);
-            if (t != null && !TextUtils.isEmpty(t.currency)) hint = "TWD".equals(t.currency) ? null : t.currency;
-        }
+        // 只寫「$」「元」「¥」時算哪種貨幣：錢包通知看人在哪裡（店家當地貨幣），銀行 App / 簡訊看卡片結算幣別
+        Trip trip = Db.get(c).tripAt(when);
+        String hint = Region.pickHint(Prefs.isWallet(pkg), card != null, card == null ? "" : card.currency,
+                currencyForPackage(pkg), Region.networkCurrency(c),
+                trip == null ? null : trip.currency, Region.zoneCurrency());
 
         PaymentParser.Result p = hint != null ? PaymentParser.parse(text, hint) : p0;
         if (card != null) p.card = card.label();
